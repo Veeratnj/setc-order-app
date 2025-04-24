@@ -4,7 +4,7 @@ from sqlalchemy import text, bindparam
 import psql
 from services import get_profile, place_angelone_order,get_auth,get_historical_data,combine_historical_with_live_algo
 from creds import *
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 # Configure logging
 logging.basicConfig(
@@ -84,8 +84,16 @@ def trade_function(row):
             todate= now.strftime('%Y-%m-%d %H:%M'),
         )
         logging.info(f"Fetched historical data: {ovr_data}")
-        
+
+        def is_five_minute_window():
+            now = datetime.now()
+            return now.minute % 5 == 0 and now.second == 1
+
         while True:
+            if not is_five_minute_window():
+                logging.info(f"Waiting for the next 5-minute window")
+                # time.sleep(1)
+                continue
             logging.info(f"Entering while loop with trade_count: {trade_count}")
             if trade_count <= 0:
                 logging.info(f"Exiting while loop as trade_count is less than or equal to 0")
