@@ -77,7 +77,7 @@ def trade_function(row):
             smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
             exchange='NSE',
             symboltoken=stock_token, 
-            interval='ONE_MINUTE', 
+            interval='FIVE_MINUTE', 
             # fromdate='2025-04-21 09:00',
             fromdate=fromdate.strftime('%Y-%m-%d %H:%M'),
             # todate='2025-04-21 09:00',
@@ -91,7 +91,7 @@ def trade_function(row):
 
         while True:
             if not is_five_minute_window():
-                logging.info(f"Waiting for the next 5-minute window")
+                # logging.info(f"Waiting for the next 5-minute window")
                 # time.sleep(1)
                 continue
             logging.info(f"Entering while loop with trade_count: {trade_count}")
@@ -99,7 +99,7 @@ def trade_function(row):
                 logging.info(f"Exiting while loop as trade_count is less than or equal to 0")
                 break
             ovr_data = combine_historical_with_live_algo(historical_df=ovr_data, token=stock_token)
-            logging.info(f"Combined historical with live algo: {ovr_data}")
+            # logging.info(f"Combined historical with live algo: {ovr_data}")
             
             final_row = ovr_data.tail(1).to_dict(orient='records')[0]
             logging.info(f"Final row: {final_row}")

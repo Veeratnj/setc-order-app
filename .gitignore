@@ -3,3 +3,6 @@
 venv/*
 venv/
 __pycache__/
+trading.log
+trading11.log
+trading12.log
