@@ -1,10 +1,13 @@
 import logging
 from threading import Thread
+import  pandas as pd
+from uuid import uuid4
 from sqlalchemy import text, bindparam
 import psql
-from services import get_profile, place_angelone_order,get_auth,get_historical_data,combine_historical_with_live_algo
+from services import get_profile, place_angelone_order, get_auth, get_historical_data, combine_historical_with_live_algo
 from creds import *
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
+from typing import Dict, Any, List
 
 # Configure logging
 logging.basicConfig(
@@ -13,177 +16,524 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s:%(message)s'
 )
 
-def trade_function(row):
+def fetch_from_db(query: str, params: Dict[str, Any], error_message: str) -> Dict[str, Any]:
+    """Helper function to fetch data from the database."""
+    try:
+        result = psql.execute_query(query, params=params)
+        if not result:
+            logging.error(error_message)
+            raise ValueError(error_message)
+        return result[0]
+    except Exception as e:
+        logging.error(f"Database query failed: {error_message} - {str(e)}", exc_info=True)
+        raise
+
+def place_order(order_params: Dict[str, Any], user_id: int, stock_token: str) -> None:
+    """Helper function to place an order."""
+    try:
+        logging.info(f"Placing order with params: {order_params}")
+        result=place_angelone_order(
+            smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
+            order_details=order_params
+        )
+        logging.info(f"Order placed successfully for user_id={user_id}, stock_token={stock_token}")
+        return result
+    except Exception as e:
+        logging.error(f"Failed to place order for user_id={user_id}, stock_token={stock_token} - {str(e)}", exc_info=True)
+        return None
+    
+def trade_function12(row: Dict[str, Any]) -> None:
+    """Processes a single trade based on the provided row data."""
     try:
         logging.info(f"Entering trade_function with row: {row}")
         
         # Extracting values from row
-        logging.info(f"Extracting values from row")
-        quantity = row['quantity']  # number of stocks to buy
-        logging.info(f"Extracted quantity: {quantity}")
-        stock_token = row['stock_token']  # stock token from the database
-        logging.info(f"Extracted stock_token: {stock_token}")
-        trade_count = row['trade_count']  # number of trades to be executed
-        logging.info(f"Extracted trade_count: {trade_count}")
-        user_id = row['user_id']  # user ID from the database
-        logging.info(f"Extracted user_id: {user_id}")
-        strategy_id = row['strategy_id']  # strategy uuid from the database
-        logging.info(f"Extracted strategy_id: {strategy_id}")
-        
+        quantity: int = row['quantity']
+        stock_token: str = row['stock_token']
+        trade_count: int = row['trade_count']
+        user_id: int = row['user_id']
+        strategy_id: str = row['strategy_id']
+
         logging.info(f"Processing trade for user_id={user_id}, strategy_id={strategy_id}, stock_token={stock_token}")
         
         # Fetching user details
-        logging.info(f"Fetching user details for user_id: {user_id}")
-        user_details = psql.execute_query(
-            'select * from "user" where id = :user_id',
-            params={'user_id': user_id}
+        user_details: Dict[str, Any] = fetch_from_db(
+            'SELECT * FROM "user" WHERE id = :user_id',
+            {'user_id': user_id},
+            f"User details not found for user_id: {user_id}"
         )
-        logging.info(f"Fetched user details: {user_details}")
-        if not user_details:
-            logging.error(f"User details not found for user_id: {user_id}")
-            raise ValueError(f"User details not found for user_id: {user_id}")
-        user_details = user_details[0]
         
         # Fetching strategy details
-        logging.info(f"Fetching strategy details for strategy_id: {strategy_id}")
-        strategy_details = psql.execute_query(
-            'select * from strategy where uuid = :strategy_id',
-            params={'strategy_id': strategy_id}
+        strategy_details: Dict[str, Any] = fetch_from_db(
+            'SELECT * FROM strategy WHERE uuid = :strategy_id',
+            {'strategy_id': strategy_id},
+            f"Strategy details not found for strategy_id: {strategy_id}"
         )
-        logging.info(f"Fetched strategy details: {strategy_details}")
-        if not strategy_details:
-            logging.error(f"Strategy details not found for strategy_id: {strategy_id}")
-            raise ValueError(f"Strategy details not found for strategy_id: {strategy_id}")
-        strategy_details = strategy_details[0]
         
         # Fetching stock details
-        logging.info(f"Fetching stock details for stock_token: {stock_token}")
-        stock_details = psql.execute_query(
-            "select * from stock_details where token = :stock_token",
-            params={'stock_token': str(stock_token)}
+        stock_details: Dict[str, Any] = fetch_from_db(
+            "SELECT * FROM stock_details WHERE token = :stock_token",
+            {'stock_token': str(stock_token)},
+            f"Stock details not found for stock_token: {stock_token}"
         )
-        logging.info(f"Fetched stock details: {stock_details}")
-        # if not stock_details or 'stock_name' not in stock_details:
-        #     logging.error(f"Stock details not found or incomplete for token: {stock_token}")
-        #     raise ValueError(f"Stock details not found or incomplete for token: {stock_token}")
-        stock_details = stock_details[0]
         
         # Fetching historical data
         logging.info(f"Fetching historical data for stock_token: {stock_token}")
-        now = datetime.now()
-        fromdate = (now - timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+        now: datetime = datetime.now()
+        fromdate: datetime = (now - timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
 
         ovr_data = get_historical_data(
             smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
             exchange='NSE',
             symboltoken=stock_token, 
             interval='FIVE_MINUTE', 
-            # fromdate='2025-04-21 09:00',
             fromdate=fromdate.strftime('%Y-%m-%d %H:%M'),
-            # todate='2025-04-21 09:00',
-            todate= now.strftime('%Y-%m-%d %H:%M'),
+            todate=now.strftime('%Y-%m-%d %H:%M'),
         )
         logging.info(f"Fetched historical data: {ovr_data}")
 
-        def is_five_minute_window():
-            now = datetime.now()
-            return now.minute % 5 == 0 and now.second == 1
+        # Initialize trade state
+        current_position: str = None  # Possible values: None, "buy", "sell"
 
-        while True:
+        def is_five_minute_window() -> bool:
+            now: datetime = datetime.now()
+            return now.minute % 5 == 0 and now.second == 1
+        order_id= uuid4()
+        # Insert into order_manager
+        strategy_pk_id=psql.execute_query("SELECT id FROM strategy WHERE uuid = :strategy_id", params={"strategy_id": strategy_id})[0]
+        print("strategy_pk_id",strategy_pk_id)
+        psql.execute_query(
+            raw_sql="""  insert into order_manager (order_id, completed_order_count, buy_count, sell_count, is_active, created_at, updated_at, user_active_strategy_id)
+  values(:order_id, :completed_order_count, :buy_count, :sell_count, :is_active, :created_at, :updated_at, :user_active_strategy_id)""",
+            params={
+                "order_id": order_id,
+                "completed_order_count": 0,
+                "buy_count": 0,
+                "sell_count": 0,
+                "is_active": True,
+                'created_at': datetime.now(),
+                'updated_at': datetime.now(),
+                "user_active_strategy_id": row['id'],
+            }
+        )
+        print("order_id",order_id)
+        
+        # Main trading loop
+        while trade_count > 0:
             if not is_five_minute_window():
-                # logging.info(f"Waiting for the next 5-minute window")
-                # time.sleep(1)
                 continue
+
             logging.info(f"Entering while loop with trade_count: {trade_count}")
-            if trade_count <= 0:
-                logging.info(f"Exiting while loop as trade_count is less than or equal to 0")
-                break
             ovr_data = combine_historical_with_live_algo(historical_df=ovr_data, token=stock_token)
-            # logging.info(f"Combined historical with live algo: {ovr_data}")
-            
-            final_row = ovr_data.tail(1).to_dict(orient='records')[0]
-            logging.info(f"Final row: {final_row}")
-            
-            if final_row['buy'] == 1:
-                logging.info(f"Buy signal received")
-                trade_count -= 1
-                order_params = {
-                    "variety": "NORMAL",
-                    "tradingsymbol": stock_details['stock_name'],
-                    "symboltoken": stock_token,
-                    "transactiontype": "BUY",
-                    "exchange": "NSE",
-                    "ordertype": "MARKET",
-                    "producttype": "INTRADAY",
-                    "duration": "DAY",
-                    "price": "0",
-                    "squareoff": "0",
-                    "stoploss": "0",
-                    "quantity": quantity
+            final_row: Dict[str, Any] = ovr_data.tail(1).to_dict(orient='records')[0]
+            # with open("signals.txt", "a") as f:
+            #     f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n")
+
+
+
+            if final_row.get('buy') == 1:
+                if current_position is None:
+                    trade_count -= 1
+                    current_position = "buy"
+                    order_params: Dict[str, Any] = {
+                        "variety": "NORMAL",
+                        "tradingsymbol": stock_details['stock_name'],
+                        "symboltoken": stock_token,
+                        "transactiontype": "BUY",
+                        "exchange": "NSE",
+                        "ordertype": "MARKET",
+                        "producttype": "INTRADAY",
+                        "duration": "DAY",
+                        "price": "0",
+                        "squareoff": "0",
+                        "stoploss": "0",
+                        "quantity": quantity
+                    }
+                    # angelone_response=place_order(order_params, user_id, stock_token)
+                    with open("signals.txt", "a") as f:
+                        f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n {angelone_response}\n")
+                    psql.execute_query(
+                        raw_sql="""
+                        insert into 
+                            equity_trade_history (order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
+                            )
+                            values
+                            (:order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time)
+                        """,
+                        params={
+                            "order_id": order_id, # needs to be replaced with actual order ID
+                            "stock_token": stock_token,
+                            "trade_type": "BUY",
+                            "quantity": quantity,
+                            "price": 0,
+                            "entry_ltp": final_row['close'],
+                            "exit_ltp": 0,
+                            "total_price": 0,
+                            "trade_entry_time": datetime.now(),
+                            "trade_exit_time": None
+                        }
+                    )
+                else:
+                    logging.info(f"Cannot place buy order. Current position: {current_position}")
+
+            elif final_row.get('sell') == 1:
+                if current_position is None:
+                    trade_count -= 1
+                    current_position = "sell"
+                    order_params: Dict[str, Any] = {
+                        "variety": "NORMAL",
+                        "tradingsymbol": stock_details['stock_name'],
+                        "symboltoken": stock_token,
+                        "transactiontype": "SELL",
+                        "exchange": "NSE",
+                        "ordertype": "MARKET",
+                        "producttype": "INTRADAY",
+                        "duration": "DAY",
+                        "price": "0",
+                        "squareoff": "0",
+                        "stoploss": "0",
+                        "quantity": quantity
+                    }
+                    # place_order(order_params, user_id, stock_token)
+                    with open("signals.txt", "a") as f:
+                        f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n")
+                    psql.execute_query(
+                            raw_sql="""
+                            insert into 
+                                equity_trade_history (order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
+                                )
+                                values
+                                (:order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time)
+                            """,
+                            params={
+                                "order_id": order_id,  # needs to be replaced with actual order ID
+                                "stock_token": stock_token,
+                                "trade_type": "SELL",
+                                "quantity": quantity,
+                                "price": 0,
+                                "entry_ltp": final_row['close'],
+                                "exit_ltp": 0,
+                                "total_price": 0,
+                                "trade_entry_time": datetime.now(),
+                                "trade_exit_time": None
+                            }
+                        )
+                else:
+                    logging.info(f"Cannot place sell order. Current position: {current_position}")
+
+            elif final_row.get('buy_exit') == 1:
+                if current_position == "buy":
+                    psql.execute_query("""
+                    UPDATE equity_trade_history
+                    SET exit_ltp = :exit_ltp, 
+                    trade_exit_time = :trade_exit_time
+                    WHERE order_id = :order_id;
+                    """,params = {
+                    "exit_ltp": final_row['close'],              
+                    "trade_exit_time": datetime.now(),        # or actual exit time
+                    "order_id": order_id                      # the same order_id used in the insert
                 }
-                logging.info(f"Order params for buy: {order_params}")
-                place_angelone_order(smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token), order_details=order_params)
-                logging.info(f"Order placed for user_id={user_id}, stock_token={stock_token}")
-            elif final_row['sell'] == 1:
-                logging.info(f"Sell signal received")
-                trade_count -= 1
-                order_params = {
-                    "variety": "NORMAL",
-                    "tradingsymbol": stock_details['stock_name'],
-                    "symboltoken": stock_token,
-                    "transactiontype": "SELL",
-                    "exchange": "NSE",
-                    "ordertype": "MARKET",
-                    "producttype": "INTRADAY",
-                    "duration": "DAY",
-                    "price": "0",
-                    "squareoff": "0",
-                    "stoploss": "0",
-                    "quantity": quantity
+)
+                    # trade_count -= 1
+                    current_position = None
+                    logging.info(f"Buy exit executed for stock_token={stock_token}")
+                else:
+                    logging.info(f"Cannot execute buy exit. Current position: {current_position}")
+
+            elif final_row.get('sell_exit') == 1:
+                if current_position == "sell":
+                    # trade_count -= 1
+                    psql.execute_query("""
+                    UPDATE equity_trade_history
+                    SET exit_ltp = :exit_ltp, 
+                    trade_exit_time = :trade_exit_time
+                    WHERE order_id = :order_id;
+                    """,params = {
+                    "exit_ltp": final_row['close'],             
+                    "trade_exit_time": datetime.now(),        # or actual exit time
+                    "order_id": order_id                      # the same order_id used in the insert
+                })
+                    current_position = None
+                    logging.info(f"Sell exit executed for stock_token={stock_token}")
+                else:
+                    logging.info(f"Cannot execute sell exit. Current position: {current_position}")
+
+
+        psql.execute_query(
+            "UPDATE user_active_strategy SET status = 'close' WHERE id = :id",
+            params={
+                id: row['id']
+            }
+        )
+    except Exception as e:
+        logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
+
+
+
+
+
+def trade_function(row: Dict[str, Any]) -> None:
+    """Processes a single trade based on the provided row data."""
+    try:
+        logging.info(f"Entering trade_function with row: {row}")
+        
+        # Extracting values from row
+        quantity: int = row['quantity']
+        stock_token: str = row['stock_token']
+        trade_count: int = row['trade_count']
+        user_id: int = row['user_id']
+        strategy_id: str = row['strategy_id']
+        user_strategy_id: int = row['id']
+
+        logging.info(f"Processing trade for user_id={user_id}, strategy_id={strategy_id}, stock_token={stock_token}")
+        stock_details: Dict[str, Any] = fetch_from_db(
+            "SELECT * FROM stock_details WHERE token = :stock_token",
+            {'stock_token': str(stock_token)},
+            f"Stock details not found for stock_token: {stock_token}"
+        )
+        # Fetching strategy primary key ID
+        # order_manager_uuid = psql.execute_query(
+        #     "SELECT id FROM strategy WHERE uuid = :strategy_id",
+        #     params={"strategy_id": strategy_id}
+        # )[0]
+
+        # Generate a unique order_id
+        order_manager_uuid = uuid4()
+
+        # Insert into order_manager with ON CONFLICT handling
+        psql.execute_query(
+            raw_sql="""
+            INSERT INTO order_manager (
+                order_id, completed_order_count, buy_count, sell_count, is_active, created_at, updated_at, user_active_strategy_id
+            ) VALUES (
+                :order_id, :completed_order_count, :buy_count, :sell_count, :is_active, :created_at, :updated_at, :user_active_strategy_id
+            )
+            ON CONFLICT (order_id) DO NOTHING;
+            """,
+            params={
+                "order_id": order_manager_uuid,
+                "completed_order_count": 0,
+                "buy_count": 0,
+                "sell_count": 0,
+                "is_active": True,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "user_active_strategy_id": user_strategy_id,
+            }
+        )
+        logging.info(f"Order created with order_id={order_manager_uuid} for strategy_id={strategy_id}")
+
+        # Main trading loop
+        def is_five_minute_window() -> bool:
+            now: datetime = datetime.now()
+            return now.minute % 5 == 0 and now.second == 1
+        ovr_data =pd.DataFrame()
+        current_position= None  # Possible values: None, "buy", "sell"  
+        while trade_count > 0:
+            if not is_five_minute_window():
+                continue
+
+            logging.info(f"Entering while loop with trade_count: {trade_count}")
+            ovr_data = combine_historical_with_live_algo(historical_df=ovr_data, token=stock_token)
+            final_row: Dict[str, Any] = ovr_data.tail(1).to_dict(orient='records')[0]
+            # with open("signals.txt", "a") as f:
+            #     f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n")
+
+
+
+            if final_row.get('buy') == 1:
+                if current_position is None:
+                    trade_count -= 1
+                    current_position = "buy"
+                    order_params: Dict[str, Any] = {
+                        "variety": "NORMAL",
+                        "tradingsymbol": stock_details['stock_name'],
+                        "symboltoken": stock_token,
+                        "transactiontype": "BUY",
+                        "exchange": "NSE",
+                        "ordertype": "MARKET",
+                        "producttype": "INTRADAY",
+                        "duration": "DAY",
+                        "price": "0",
+                        "squareoff": "0",
+                        "stoploss": "0",
+                        "quantity": quantity
+                    }
+                    # angelone_response=place_order(order_params, user_id, stock_token)
+                    with open("signals.txt", "a") as f:
+                        f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n {'angelone_response'}\n")
+                    psql.execute_query(
+                        raw_sql="""
+                        insert into 
+                            equity_trade_history (order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
+                            )
+                            values
+                            (:order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time)
+                        """,
+                        params={
+                            "order_id": order_manager_uuid, # needs to be replaced with actual order ID
+                            "stock_token": stock_token,
+                            "trade_type": "BUY",
+                            "quantity": quantity,
+                            "price": 0,
+                            "entry_ltp": final_row['close'],
+                            "exit_ltp": 0,
+                            "total_price": 0,
+                            "trade_entry_time": datetime.now(),
+                            "trade_exit_time": None
+                        }
+                    )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE order_manager
+                        SET buy_count = buy_count + 1
+                        WHERE order_id = :order_id;
+                        """,
+                        params={
+                            "order_id": order_manager_uuid
+                        }
+                    )
+                else:
+                    logging.info(f"Cannot place buy order. Current position: {current_position}")
+
+            elif final_row.get('sell') == 1:
+                if current_position is None:
+                    trade_count -= 1
+                    current_position = "sell"
+                    order_params: Dict[str, Any] = {
+                        "variety": "NORMAL",
+                        "tradingsymbol": stock_details['stock_name'],
+                        "symboltoken": stock_token,
+                        "transactiontype": "SELL",
+                        "exchange": "NSE",
+                        "ordertype": "MARKET",
+                        "producttype": "INTRADAY",
+                        "duration": "DAY",
+                        "price": "0",
+                        "squareoff": "0",
+                        "stoploss": "0",
+                        "quantity": quantity
+                    }
+                    # place_order(order_params, user_id, stock_token)
+                    with open("signals.txt", "a") as f:
+                        f.write(f"final_row: Dict[str, Any] = {ovr_data.tail(1).to_dict(orient='records')[0]}\n")
+                    psql.execute_query(
+                            raw_sql="""
+                            insert into 
+                                equity_trade_history (order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
+                                )
+                                values
+                                (:order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time)
+                            """,
+                            params={
+                                "order_id": order_manager_uuid,  # needs to be replaced with actual order ID
+                                "stock_token": stock_token,
+                                "trade_type": "SELL",
+                                "quantity": quantity,
+                                "price": 0,
+                                "entry_ltp": final_row['close'],
+                                "exit_ltp": 0,
+                                "total_price": 0,
+                                "trade_entry_time": datetime.now(),
+                                "trade_exit_time": None
+                            }
+                        )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE order_manager
+                        SET sell_count = sell_count + 1
+                        WHERE order_id = :order_id;
+                        """,
+                        params={
+                            "order_id": order_manager_uuid
+                        }
+                    )
+                else:
+                    logging.info(f"Cannot place sell order. Current position: {current_position}")
+
+            elif final_row.get('buy_exit') == 1:
+                if current_position == "buy":
+                    psql.execute_query("""
+                    UPDATE equity_trade_history
+                    SET exit_ltp = :exit_ltp, 
+                    trade_exit_time = :trade_exit_time
+                    WHERE order_id = :order_id;
+                    """,params = {
+                    "exit_ltp": final_row['close'],              
+                    "trade_exit_time": datetime.now(),        # or actual exit time
+                    "order_id": order_manager_uuid                      # the same order_id used in the insert
                 }
-                logging.info(f"Order params for sell: {order_params}")
-            
-            # logging.info(f"Placing order with order_params: {order_params}")
-                place_angelone_order(smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token), order_details=order_params)
-                logging.info(f"Order placed for user_id={user_id}, stock_token={stock_token}")
-            
-            if final_row['buy_exit']:
-                logging.info(f"Buy exit signal received")
-                # 'logic to exit buy position'
-            if final_row['sell_exit']:
-                logging.info(f"Sell exit signal received")
-                # 'logic to exit sell position'
+)
+                    # trade_count -= 1
+                    current_position = None
+                    logging.info(f"Buy exit executed for stock_token={stock_token}")
+                else:
+                    logging.info(f"Cannot execute buy exit. Current position: {current_position}")
+
+            elif final_row.get('sell_exit') == 1:
+                if current_position == "sell":
+                    # trade_count -= 1
+                    psql.execute_query("""
+                    UPDATE equity_trade_history
+                    SET exit_ltp = :exit_ltp, 
+                    trade_exit_time = :trade_exit_time
+                    WHERE order_id = :order_id;
+                    """,params = {
+                    "exit_ltp": final_row['close'],             
+                    "trade_exit_time": datetime.now(),        # or actual exit time
+                    "order_id": order_manager_uuid                      # the same order_id used in the insert
+                })
+                    current_position = None
+                    logging.info(f"Sell exit executed for stock_token={stock_token}")
+                else:
+                    logging.info(f"Cannot execute sell exit. Current position: {current_position}")
+
 
     except Exception as e:
         logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
 
 
-def main():
+
+
+
+
+
+
+
+
+
+
+
+def main() -> None:
+    """Main function to start the trading process."""
     try:
-        data = psql.execute_query("SELECT * FROM user_active_strategy WHERE is_started = false")
+        data: List[Dict[str, Any]] = psql.execute_query(text("SELECT * FROM user_active_strategy WHERE is_started = false"))
         if not data:
             logging.info("No new strategies to start.")
             return
         
-        ids_to_update = [row['id'] for row in data]
+        ids_to_update: List[int] = [row['id'] for row in data]
 
-        sql = text("UPDATE user_active_strategy SET is_started = true WHERE id IN :ids")
-        sql = sql.bindparams(bindparam("ids", expanding=True))
-
-        # Update the DB to avoid re-processing
+        # sql = text("UPDATE user_active_strategy SET is_started = true,status='active' WHERE id IN :ids")
+        # sql = sql.bindparams(bindparam("ids", expanding=True))
         # psql.execute_query(sql, params={"ids": ids_to_update})
         logging.info(f"Updated is_started=true for IDs: {ids_to_update}")
 
         for row in data:
+            print(row)
+            sql = text("UPDATE user_active_strategy SET is_started = true,status='active' WHERE id = :id")
+            psql.execute_query(sql, params={"id": row['id']})
             # print(row)
             trade_function(row)
-            break
-            # thread = Thread(target=trade_function, args=(row,))
-            # thread.start()
+            # break  # Remove this break to process all rows or use threading for parallel execution
 
     except Exception as e:
         logging.error("Error in main function", exc_info=True)
 
-# if __name__ == "__main__":
-print("Starting trading process...")
-main()
+
+
+
+
+if __name__ == "__main__":
+    logging.info("Starting trading process...")
+    main()

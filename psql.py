@@ -121,10 +121,10 @@ class TradeHistory(Base):
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-def execute_query(raw_sql, params=None):
+def execute_queryv1(raw_sql, params=None):
     session = SessionLocal()
     try:
-        result = session.execute(text(raw_sql), params or {})
+        result = session.execute(raw_sql, params or {})
 
         if result.returns_rows:
             # Get column names from result
@@ -145,3 +145,24 @@ def execute_query(raw_sql, params=None):
 
 
 
+def execute_query(raw_sql, params=None):
+    session = SessionLocal()
+    try:
+        # Wrap raw_sql in `text()` if it is a string
+        raw_sql = text(raw_sql) if isinstance(raw_sql, str) else raw_sql
+        result = session.execute(raw_sql, params or {})
+        if result.returns_rows:
+            # Convert result to a list of dictionaries
+            columns = result.keys()
+            data = [dict(zip(columns, row)) for row in result.fetchall()]
+            session.close()
+            return data
+        else:
+            session.commit()
+            session.close()
+            return {"status": "success", "message": "Query executed successfully."}
+    except SQLAlchemyError as e:
+        session.rollback()
+        session.close()
+        # logging.error(f"SQLAlchemyError: {str(e)}", exc_info=True)
+        raise
