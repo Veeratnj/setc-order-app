@@ -102,42 +102,94 @@ def get_historical_data(
         logging.error(f"An error occurred while fetching historical data: {str(e)}", exc_info=True)
         return None
 
-def buy_sell_function(data: pd.DataFrame) -> tuple:
+def buy_sell_function12(data: pd.DataFrame) -> tuple:
     """Generate buy/sell signals based on EMA crossover strategy."""
     try:
         logging.info("Generating buy/sell signals...")
         buy_list, sell_list, buy_exit_list, sell_exit_list = [], [], [], []
         flag_long, flag_short = False, False
 
-        for i in range(len(data)):
-            short_temp = data['short'].iloc[i]
-            middle_temp = data['middle'].iloc[i]
-            long_temp = data['long'].iloc[i]
+        # for i in range(len(data)):
+        #     short_temp = data['short'].iloc[i]
+        #     middle_temp = data['middle'].iloc[i]
+        #     long_temp = data['long'].iloc[i]
 
-            if not flag_long and not flag_short and middle_temp < long_temp and short_temp < middle_temp:
-                sell_list.append(1)
-                buy_list.append(np.nan)
-                sell_exit_list.append(np.nan)
-                buy_exit_list.append(np.nan)
-                flag_short = True
-            elif flag_short and short_temp > middle_temp:
-                sell_exit_list.append(1)
+        #     if not flag_long and not flag_short and middle_temp < long_temp and short_temp < middle_temp:
+        #         sell_list.append(1)
+        #         buy_list.append(np.nan)
+        #         sell_exit_list.append(np.nan)
+        #         buy_exit_list.append(np.nan)
+        #         flag_short = True
+        #     elif flag_short and short_temp > middle_temp:
+        #         sell_exit_list.append(1)
+        #         buy_list.append(np.nan)
+        #         sell_list.append(np.nan)
+        #         buy_exit_list.append(np.nan)
+        #         flag_short = False
+        #     elif not flag_long and not flag_short and middle_temp < long_temp and short_temp > middle_temp:
+        #         buy_list.append(1)
+        #         sell_list.append(np.nan)
+        #         buy_exit_list.append(np.nan)
+        #         sell_exit_list.append(np.nan)
+        #         flag_long = True
+        #     elif flag_long and short_temp < middle_temp:
+        #         buy_exit_list.append(1)
+        #         sell_list.append(np.nan)
+        #         buy_list.append(np.nan)
+        #         sell_exit_list.append(np.nan)
+        #         flag_long = False
+        #     else:
+        #         buy_list.append(np.nan)
+        #         sell_list.append(np.nan)
+        #         buy_exit_list.append(np.nan)
+        #         sell_exit_list.append(np.nan)
+
+
+        for i in range(len(data)):
+            short = data['short'].iloc[i]
+            middle = data['middle'].iloc[i]
+            long = data['long'].iloc[i]
+
+            # Skip if any EMA is NaN
+            if pd.isna(short) or pd.isna(middle) or pd.isna(long):
                 buy_list.append(np.nan)
                 sell_list.append(np.nan)
                 buy_exit_list.append(np.nan)
+                sell_exit_list.append(np.nan)
+                continue
+
+            # Short Entry
+            if not flag_short and not flag_long and short < middle and middle < long:
+                buy_list.append(np.nan)
+                sell_list.append(1)
+                buy_exit_list.append(np.nan)
+                sell_exit_list.append(np.nan)
+                flag_short = True
+
+            # Short Exit
+            elif flag_short and short > middle:
+                buy_list.append(np.nan)
+                sell_list.append(np.nan)
+                buy_exit_list.append(np.nan)
+                sell_exit_list.append(1)
                 flag_short = False
-            elif not flag_long and not flag_short and middle_temp < long_temp and short_temp > middle_temp:
+
+            # Long Entry
+            elif not flag_long and not flag_short and short > middle and middle < long:
                 buy_list.append(1)
                 sell_list.append(np.nan)
                 buy_exit_list.append(np.nan)
                 sell_exit_list.append(np.nan)
                 flag_long = True
-            elif flag_long and short_temp < middle_temp:
-                buy_exit_list.append(1)
-                sell_list.append(np.nan)
+
+            # Long Exit
+            elif flag_long and short < middle:
                 buy_list.append(np.nan)
+                sell_list.append(np.nan)
+                buy_exit_list.append(1)
                 sell_exit_list.append(np.nan)
                 flag_long = False
+
             else:
                 buy_list.append(np.nan)
                 sell_list.append(np.nan)
@@ -149,6 +201,7 @@ def buy_sell_function(data: pd.DataFrame) -> tuple:
     except Exception as e:
         logging.error(f"Error generating buy/sell signals: {str(e)}", exc_info=True)
         raise
+
 
 def get_latest_ltp_from_db(token: str) -> Optional[Dict[str, Any]]:
     """Fetch the latest LTP from the database."""
@@ -204,7 +257,7 @@ def combine_historical_with_live_algo(historical_df: pd.DataFrame, token: str) -
             combined_df.loc[combined_df.index[-1], 'buy_exit'] = buy_exit_list[0]
             combined_df.loc[combined_df.index[-1], 'sell_exit'] = sell_exit_list[0]
 
-            logging.info("Historical and live data combined successfully.")
+            logging.info(f"Historical and live data combined successfully. {str([buy_list, sell_list, buy_exit_list, sell_exit_list])}")
             return combined_df
         else:
             logging.warning("No latest price found. Returning historical data as is.")
@@ -212,3 +265,4 @@ def combine_historical_with_live_algo(historical_df: pd.DataFrame, token: str) -
     except Exception as e:
         logging.error(f"Error combining historical and live data: {str(e)}", exc_info=True)
         raise
+
