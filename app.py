@@ -96,7 +96,6 @@ def trade_function(row: Dict[str, Any]) -> None:
         logging.info(f"Order created with order_id={order_manager_uuid} for strategy_id={strategy_id}")
 
         # --- Initialize historical data ---
-        # You should fetch historical data only once at the start
         smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
         today = datetime.now()
         fromdate = (today - timedelta(days=10)).strftime("%Y-%m-%d %H:%M")
@@ -114,13 +113,12 @@ def trade_function(row: Dict[str, Any]) -> None:
             return
 
         ovr_data = historical_df.copy()
-        current_position = None  # Possible values: None, "buy", "sell"
 
         def is_five_minute_window() -> bool:
             now: datetime = datetime.now()
             return now.minute % 5 == 0 and now.second == 1
 
-        while trade_count > 0 or current_position is not None:
+        while trade_count > 0:
             # Wait for the next 5-minute window
             while not is_five_minute_window():
                 time.sleep(0.5)
@@ -134,9 +132,10 @@ def trade_function(row: Dict[str, Any]) -> None:
                 f.write(f"final_row: Dict[str, Any] signals = {final_row}\n")
 
             if final_row.get('buy') == 1:
-                if current_position is None:
+                if True:
+                # if current_position is None:
                     trade_count -= 1
-                    current_position = "buy"
+                    # current_position = "buy"
                     order_params: Dict[str, Any] = {
                         "variety": "NORMAL",
                         "tradingsymbol": stock_details['stock_name'],
@@ -186,12 +185,13 @@ def trade_function(row: Dict[str, Any]) -> None:
                         }
                     )
                 else:
-                    logging.info(f"Cannot place buy order. Current position: {current_position}")
+                    logging.info(f"Cannot place buy order. Current position: ")
 
             elif final_row.get('sell') == 1:
-                if current_position is None:
+                # if current_position is None:
+                if True:
                     trade_count -= 1
-                    current_position = "sell"
+                    # current_position = "sell"
                     order_params: Dict[str, Any] = {
                         "variety": "NORMAL",
                         "tradingsymbol": stock_details['stock_name'],
@@ -241,10 +241,11 @@ def trade_function(row: Dict[str, Any]) -> None:
                         }
                     )
                 else:
-                    logging.info(f"Cannot place sell order. Current position: {current_position}")
+                    logging.info(f"Cannot place sell order. Current position: ")
 
             elif final_row.get('buy_exit') == 1:
-                if current_position == "buy":
+                if True:
+                # if current_position == "buy":
                     psql.execute_query("""
                     UPDATE equity_trade_history
                     SET exit_ltp = :exit_ltp, 
@@ -255,13 +256,14 @@ def trade_function(row: Dict[str, Any]) -> None:
                         "trade_exit_time": datetime.now(),
                         "order_id": order_manager_uuid
                     })
-                    current_position = None
+                    # current_position = None
                     logging.info(f"Buy exit executed for stock_token={stock_token}")
                 else:
-                    logging.info(f"Cannot execute buy exit. Current position: {current_position}")
+                    logging.info(f"Cannot execute buy exit. Current position: ")
 
             elif final_row.get('sell_exit') == 1:
-                if current_position == "sell":
+                if True:
+                # if current_position == "sell":
                     psql.execute_query("""
                     UPDATE equity_trade_history
                     SET exit_ltp = :exit_ltp, 
@@ -272,7 +274,7 @@ def trade_function(row: Dict[str, Any]) -> None:
                         "trade_exit_time": datetime.now(),
                         "order_id": order_manager_uuid
                     })
-                    current_position = None
+                    # current_position = None
                     logging.info(f"Sell exit executed for stock_token={stock_token}")
                 else:
                     logging.info(f"Cannot execute sell exit. Current position: {current_position}")

@@ -39,4 +39,5 @@ smartapi-python
 pandas
 uvicorn[standard]
 psycopg2-binary
+yfinance
 # https://smartapi.angelbroking.com/topic/45/token-with-symbol
