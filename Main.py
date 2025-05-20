@@ -37,7 +37,7 @@ class StrategyTrader:
             logging.error(f"Failed to place order for user_id={user_id}, stock_token={stock_token} - {str(e)}", exc_info=True)
             return None
 
-    def fetch_from_db(query: str, params: Dict[str, Any], error_message: str) -> Dict[str, Any]:
+    def fetch_from_db(self,query: str, params: Dict[str, Any], error_message: str) -> Dict[str, Any]:
         """Helper function to fetch data from the database."""
         try:
             result = psql.execute_query(query, params=params)
@@ -56,10 +56,10 @@ class StrategyTrader:
         """
         try:
             query = """
-                SELECT timestamp, ltp
-                FROM live_market_data
-                WHERE stock_token = :stock_token
-                ORDER BY timestamp DESC
+                SELECT last_update, ltp
+                FROM stock_details
+                WHERE token = :stock_token
+                ORDER BY last_update DESC
                 LIMIT 1
             """
             params = {"stock_token": stock_token}
@@ -70,18 +70,19 @@ class StrategyTrader:
                 raise ValueError(error_message)
             row = result[0]
             # Ensure timestamp is in datetime format
-            ltp_timestamp = row['timestamp']
+            ltp_timestamp = row['last_update']
             ltp_price = row['ltp']
             return ltp_timestamp, ltp_price
         except Exception as e:
             logging.error(f"Database query failed for LTP: {str(e)}", exc_info=True)
             raise
 
-    def is_market_open():
+    def is_market_open(self):
         """Returns True if current time is within trading hours (e.g., 9:15 to 15:30). Adjust as needed."""
         now = datetime.now()
         market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
-        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        market_close = now.replace(hour=15, minute=25, second=0, microsecond=0)
+        return True
         return market_open <= now <= market_close
 
     def trade_function(self, row: Dict[str, Any]) -> None:
@@ -111,6 +112,7 @@ class StrategyTrader:
                 )
                 ON CONFLICT (order_id) DO NOTHING;
                 """,
+
                 params={
                     "order_id": order_manager_uuid,
                     "completed_order_count": 0,
@@ -122,6 +124,7 @@ class StrategyTrader:
                     "user_active_strategy_id": user_strategy_id,
                 }
             )
+            print(f"Order manager UUID: {order_manager_uuid}")
 
             # --- Initialize historical data and strategy ---
             smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
@@ -146,7 +149,7 @@ class StrategyTrader:
             def is_time_window():
                 now = datetime.now()
                 # Adjust this logic for your timeframe (5min, 1min, 30sec, etc.)
-                return now.minute % 5 == 0 and now.second < 3
+                return now.minute % 1 == 0 and now.second < 3
             open_order=False
             while (trade_count > 0 and self.is_market_open()) or open_order:
                 while not is_time_window() and self.is_market_open():
@@ -214,7 +217,12 @@ class StrategyTrader:
                     )
 
                 elif signal == 'SELL_ENTRY':
-                    open_order
+                    print((trade_count > 0 and self.is_market_open()) or open_order)
+                    print(trade_count)
+                    print(self.is_market_open())
+                    print(open_order)
+                    open_order=True
+                    
                     trade_count -= 1
                     order_params = {
                         "variety": "NORMAL",
@@ -230,7 +238,7 @@ class StrategyTrader:
                         "stoploss": "0",
                         "quantity": quantity
                     }
-                    angelone_response = self.place_order(order_params, user_id, stock_token)
+                    # angelone_response = self.place_order(order_params, user_id, stock_token)
                     psql.execute_query(
                         raw_sql="""
                         INSERT INTO equity_trade_history (
@@ -298,12 +306,41 @@ class StrategyTrader:
                 # Sleep to avoid double execution in the same minute
                 time.sleep(2)
 
+
+            print((trade_count > 0 and self.is_market_open()) or open_order)
+            print(trade_count)
+            print(self.is_market_open())
+            print(open_order)
             if trade_count > 0:
                 logging.info("Trading day ended before all trades could be completed.")
 
         except Exception as e:
             logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
 
+    def main(self) -> None:
+        """Main function to start the trading process (no threading, for testing)."""
+        try:
+            data: List[Dict[str, Any]] = psql.execute_query(
+                text("SELECT * FROM user_active_strategy WHERE is_started = false")
+            )
+            if not data:
+                logging.info("No new strategies to start.")
+                return
+
+            ids_to_update: List[int] = [row['id'] for row in data]
+            logging.info(f"Updated is_started=true for IDs: {ids_to_update}")
+
+            for row in data:
+                sql = text("UPDATE user_active_strategy SET is_started = true, status='active' WHERE id = :id")
+                psql.execute_query(sql, params={"id": row['id']})
+                print(f"Updated is_started=true for ID: {row['id']}")
+                self.trade_function(row)
+                break  # Remove this break to process all rows
+
+        except Exception as e:
+            logging.error("Error in run method", exc_info=True)
+
+
 if __name__ == "__main__":
     trader = StrategyTrader()
-    trader.run()
+    trader.main()
