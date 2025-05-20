@@ -1,3 +1,4 @@
+import time
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
@@ -125,9 +126,9 @@ class TripleEMAStrategyOptimized1:
         middle_temp = last['EMA_medium']
         long_temp = last['EMA_long']
 
-        print('short_temp:', short_temp)
-        print('middle_temp:', middle_temp)  
-        print('long_temp:', long_temp)
+        # print('short_temp:', short_temp)
+        # print('middle_temp:', middle_temp)  
+        # print('long_temp:', long_temp)
 
         # ENTRY: Not in any position
         if self.last_position is None:
@@ -169,7 +170,7 @@ class TripleEMAStrategyOptimized1:
 
 
 class TripleEMAStrategyOptimized:
-    def __init__(self, short=9, medium=21, long=55):
+    def __init__(self, short=5, medium=21, long=63):
         self.short = short
         self.medium = medium
         self.long = long
@@ -196,7 +197,7 @@ class TripleEMAStrategyOptimized:
         self.last_ema_medium = last_row['EMA_medium']
         self.last_ema_long = last_row['EMA_long']
 
-    def generate_signals_from_historical_data(self):
+    def generate_signals1(self):
         signals = []
         flag_long = False
         flag_short = False
@@ -240,7 +241,47 @@ class TripleEMAStrategyOptimized:
         self.df['Signal'] = signals
         return self.df
 
-    # You already have this method for real-time price updates
+    def generate_signals(self):
+        if len(self.df) < 2:
+            return None
+
+        prev = self.df.iloc[-2]
+        last = self.df.iloc[-1]
+
+        short_temp = last['EMA_short']
+        middle_temp = last['EMA_medium']
+        long_temp = last['EMA_long']
+
+        # ENTRY: Not in any position
+        if self.last_position is None:
+            if middle_temp < long_temp and short_temp < middle_temp:
+                self.last_position = 'SHORT'
+                self.last_signal = 'SELL'
+                print(f"📉 SELL_ENTRY at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
+                return 'SELL_ENTRY'
+
+            elif middle_temp < long_temp and short_temp > middle_temp:
+                self.last_position = 'LONG'
+                self.last_signal = 'BUY'
+                print(f"📈 BUY_ENTRY at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
+                return 'BUY_ENTRY'
+
+        elif self.last_position == 'SHORT' and short_temp > middle_temp:
+            self.last_position = None
+            self.last_signal = None
+            print(f"📈 BUY_EXIT at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
+            return 'BUY_EXIT'
+
+        elif self.last_position == 'LONG' and short_temp < middle_temp:
+            self.last_position = None
+            self.last_signal = None
+            print(f"📉 SELL_EXIT at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
+            return 'SELL_EXIT'
+
+        return None
+
+
+   
     def add_live_price(self, timestamp, ltp):
         if self.last_ema_short is None:
             return None
@@ -269,27 +310,30 @@ class TripleEMAStrategyOptimized:
         }
 
         self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
-        return self.generate_signal()  # Optional real-time signal
+        return self.generate_signals()  # Optional real-time signal
 
 
 
 
 if __name__ == "__main__":
-    smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
-    historical_data=get_historical_data(smart_api_obj=smart_api_obj,symboltoken='3045',exchange="NSE", interval="FIVE_MINUTE", fromdate='2025-05-18 00:00', todate='2025-05-19 14:30')
-
+    # smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
+    # historical_data=get_historical_data(smart_api_obj=smart_api_obj,symboltoken='3045',exchange="NSE", interval="FIVE_MINUTE", fromdate='2025-05-18 00:00', todate='2025-05-19 14:30')
+    
+    historical_data = pd.read_csv('historical_data15.csv')
+    live_data = pd.read_csv('live.csv')
     strategy = TripleEMAStrategyOptimized()
     strategy.load_historical_data(historical_data)
-    ltp_timestamp = '2025-05-19 14:35'
-    ltp_price = 795.0
-
-    signal = strategy.add_live_price(ltp_timestamp, ltp_price)
-    strategy.df.to_csv('hist.csv',index=False)
-
-    if signal:
-        print(f"📈 Signal generated: {signal}")
-    else:
-        print("📉 No signal generated.")
+    # ltp_timestamp = '2025-05-19 14:35'
+    # ltp_price = 795.0
+    for i in range(len(live_data)):
+        ltp_timestamp = live_data['timestamp'].iloc[i]
+        ltp_price = live_data['close'].iloc[i]
+        # print(f"Processing live data for timestamp: {ltp_timestamp} with price: {ltp_price}")
+        
+        signal = strategy.add_live_price(ltp_timestamp, ltp_price)
+        # print(f"Signal: {signal}")
+        # time.sleep(1)
+        
 
 
 

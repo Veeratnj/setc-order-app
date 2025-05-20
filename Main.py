@@ -131,13 +131,15 @@ class StrategyTrader:
             today = datetime.now()
             fromdate = (today - timedelta(days=10)).strftime("%Y-%m-%d %H:%M")
             todate = today.strftime("%Y-%m-%d %H:%M")
+            print(f"Fetching historical data from {fromdate} to {todate}")
+            # 5/0
             historical_df = get_historical_data(
                 smart_api_obj=smart_api_obj,
                 exchange="NSE",
                 symboltoken=stock_token,
                 interval="FIVE_MINUTE",
-                fromdate=fromdate,
-                todate=todate
+                fromdate='2025-05-16 08:11',
+                todate='2025-05-17 08:11'
             )
             if historical_df is None or historical_df.empty:
                 logging.error("No historical data found, aborting trade_function.")
