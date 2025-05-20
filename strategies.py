@@ -323,8 +323,7 @@ if __name__ == "__main__":
     live_data = pd.read_csv('live.csv')
     strategy = TripleEMAStrategyOptimized()
     strategy.load_historical_data(historical_data)
-    # ltp_timestamp = '2025-05-19 14:35'
-    # ltp_price = 795.0
+    
     for i in range(len(live_data)):
         ltp_timestamp = live_data['timestamp'].iloc[i]
         ltp_price = live_data['close'].iloc[i]

@@ -1,229 +1,158 @@
-from triple_ema_strategy import TripleEMAStrategyOptimized  # Make sure this import path is correct
+import pandas as pd
+from datetime import datetime
 
-class StrategyTrader:
-    def __init__(self):
-        pass
 
-    def get_latest_ltp(self, stock_token):
-        # Implement this function to fetch the latest price for the stock_token
-        # For example, from your broker API or a market data service
-        # Return (timestamp, ltp)
-        raise NotImplementedError("Implement get_latest_ltp to fetch live price.")
 
-    def trade_function(self, row: Dict[str, Any]) -> None:
-        try:
-            logging.info(f"Starting trade_function for row: {row}")
+class TripleEMAStrategyOptimized:
 
-            quantity = row['quantity']
-            stock_token = row['stock_token']
-            trade_count = row['trade_count']
-            user_id = row['user_id']
-            strategy_id = row['strategy_id']
-            user_strategy_id = row['id']
+    def __init__(self, short=5, medium=21, long=63):
+        self.short = short
+        self.medium = medium
+        self.long = long
 
-            stock_details = fetch_from_db(
-                "SELECT * FROM stock_details WHERE token = :stock_token",
-                {'stock_token': str(stock_token)},
-                f"Stock details not found for stock_token: {stock_token}"
-            )
+        self.df = pd.DataFrame()
+        self.last_ema_short = None
+        self.last_ema_medium = None
+        self.last_ema_long = None
+        self.last_signal = None
+        self.last_position = None 
 
-            order_manager_uuid = str(uuid4())
-            psql.execute_query(
-                raw_sql="""
-                INSERT INTO order_manager (
-                    order_id, completed_order_count, buy_count, sell_count, is_active, created_at, updated_at, user_active_strategy_id
-                ) VALUES (
-                    :order_id, :completed_order_count, :buy_count, :sell_count, :is_active, :created_at, :updated_at, :user_active_strategy_id
-                )
-                ON CONFLICT (order_id) DO NOTHING;
-                """,
-                params={
-                    "order_id": order_manager_uuid,
-                    "completed_order_count": 0,
-                    "buy_count": 0,
-                    "sell_count": 0,
-                    "is_active": True,
-                    "created_at": datetime.now(),
-                    "updated_at": datetime.now(),
-                    "user_active_strategy_id": user_strategy_id,
-                }
-            )
+    def load_historical_data(self, raw_data):
+            # print(raw_data.columns)
+            """
+            Load OHLCV data and compute EMAs.
+            """
+            self.df = pd.DataFrame(raw_data)
+            # print(self.df.columns)
+            self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
+            self.df.sort_values(by='timestamp', inplace=True)
+            self.df.reset_index(drop=True, inplace=True)
 
-            # --- Initialize historical data and strategy ---
-            smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
-            today = datetime.now()
-            fromdate = (today - timedelta(days=10)).strftime("%Y-%m-%d %H:%M")
-            todate = today.strftime("%Y-%m-%d %H:%M")
-            historical_df = get_historical_data(
-                smart_api_obj=smart_api_obj,
-                exchange="NSE",
-                symboltoken=stock_token,
-                interval="FIVE_MINUTE",
-                fromdate=fromdate,
-                todate=todate
-            )
-            if historical_df is None or historical_df.empty:
-                logging.error("No historical data found, aborting trade_function.")
-                return
+            # Calculate EMAs
+            self.df['EMA_short'] = self.df['close'].ewm(span=self.short, adjust=False).mean()
+            self.df['EMA_medium'] = self.df['close'].ewm(span=self.medium, adjust=False).mean()
+            self.df['EMA_long'] = self.df['close'].ewm(span=self.long, adjust=False).mean()
 
-            strategy = TripleEMAStrategyOptimized()
-            strategy.load_historical_data(historical_df)
+            # Pick last EMA values to continue from
+            last_row = self.df.iloc[-1]
+            self.last_ema_short = last_row['EMA_short']
+            self.last_ema_medium = last_row['EMA_medium']
+            self.last_ema_long = last_row['EMA_long']
+            self.df.to_csv('t1.csv', index=False)
 
-            def is_five_minute_window():
-                now = datetime.now()
-                return now.minute % 5 == 0 and now.second < 3
+    def add_live_price(self, timestamp, ltp):
+        """
+        Add new candle and calculate EMAs incrementally.
+        """
+        # print(self.df.columns)
+        if self.last_ema_short is None:
+            return None  # historical data not loaded
 
-            max_iterations = 100
-            iterations = 0
+        # EMA calculation
+        alpha_short = 2 / (self.short + 1)
+        alpha_medium = 2 / (self.medium + 1)
+        alpha_long = 2 / (self.long + 1)
 
-            while trade_count > 0 and iterations < max_iterations:
-                while not is_five_minute_window():
-                    time.sleep(0.5)
-                iterations += 1
+        ema_short = (ltp * alpha_short) + (self.last_ema_short * (1 - alpha_short))
+        ema_medium = (ltp * alpha_medium) + (self.last_ema_medium * (1 - alpha_medium))
+        ema_long = (ltp * alpha_long) + (self.last_ema_long * (1 - alpha_long))
 
-                # Fetch latest price (implement this function as per your infra)
-                try:
-                    ltp_timestamp, ltp_price = self.get_latest_ltp(stock_token)
-                except Exception as e:
-                    logging.error(f"Failed to fetch latest LTP: {e}")
-                    time.sleep(2)
-                    continue
+        self.last_ema_short = ema_short
+        self.last_ema_medium = ema_medium
+        self.last_ema_long = ema_long
 
-                signal = strategy.add_live_price(ltp_timestamp, ltp_price)
-                logging.info(f"Signal generated: {signal}")
+        new_row = {
+            'timestamp': pd.to_datetime(timestamp),
+            'close': ltp,
+            'open': ltp,
+            'high': ltp,
+            'low': ltp,
+            'EMA_short': ema_short,
+            'EMA_medium': ema_medium,
+            'EMA_long': ema_long
+        }
 
-                if signal == 'BUY_ENTRY':
-                    trade_count -= 1
-                    order_params = {
-                        "variety": "NORMAL",
-                        "tradingsymbol": stock_details['stock_name'],
-                        "symboltoken": stock_token,
-                        "transactiontype": "BUY",
-                        "exchange": "NSE",
-                        "ordertype": "MARKET",
-                        "producttype": "INTRADAY",
-                        "duration": "DAY",
-                        "price": "0",
-                        "squareoff": "0",
-                        "stoploss": "0",
-                        "quantity": quantity
-                    }
-                    angelone_response = place_order(order_params, user_id, stock_token)
-                    psql.execute_query(
-                        raw_sql="""
-                        INSERT INTO equity_trade_history (
-                            order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
-                        ) VALUES (
-                            :order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time
-                        )
-                        """,
-                        params={
-                            "order_id": order_manager_uuid,
-                            "stock_token": stock_token,
-                            "trade_type": "BUY",
-                            "quantity": quantity,
-                            "price": 0,
-                            "entry_ltp": ltp_price,
-                            "exit_ltp": 0,
-                            "total_price": 0,
-                            "trade_entry_time": datetime.now(),
-                            "trade_exit_time": None
-                        }
-                    )
-                    psql.execute_query(
-                        raw_sql="""
-                        UPDATE order_manager
-                        SET buy_count = buy_count + 1
-                        WHERE order_id = :order_id;
-                        """,
-                        params={"order_id": order_manager_uuid}
-                    )
+        self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
+        # print(new_row)
+        return self.generate_signal()
 
-                elif signal == 'SELL_ENTRY':
-                    trade_count -= 1
-                    order_params = {
-                        "variety": "NORMAL",
-                        "tradingsymbol": stock_details['stock_name'],
-                        "symboltoken": stock_token,
-                        "transactiontype": "SELL",
-                        "exchange": "NSE",
-                        "ordertype": "MARKET",
-                        "producttype": "INTRADAY",
-                        "duration": "DAY",
-                        "price": "0",
-                        "squareoff": "0",
-                        "stoploss": "0",
-                        "quantity": quantity
-                    }
-                    angelone_response = place_order(order_params, user_id, stock_token)
-                    psql.execute_query(
-                        raw_sql="""
-                        INSERT INTO equity_trade_history (
-                            order_id, stock_token, trade_type, quantity, price, entry_ltp, exit_ltp, total_price, trade_entry_time, trade_exit_time
-                        ) VALUES (
-                            :order_id, :stock_token, :trade_type, :quantity, :price, :entry_ltp, :exit_ltp, :total_price, :trade_entry_time, :trade_exit_time
-                        )
-                        """,
-                        params={
-                            "order_id": order_manager_uuid,
-                            "stock_token": stock_token,
-                            "trade_type": "SELL",
-                            "quantity": quantity,
-                            "price": 0,
-                            "entry_ltp": ltp_price,
-                            "exit_ltp": 0,
-                            "total_price": 0,
-                            "trade_entry_time": datetime.now(),
-                            "trade_exit_time": None
-                        }
-                    )
-                    psql.execute_query(
-                        raw_sql="""
-                        UPDATE order_manager
-                        SET sell_count = sell_count + 1
-                        WHERE order_id = :order_id;
-                        """,
-                        params={"order_id": order_manager_uuid}
-                    )
+    def generate_signal(self):
+        if len(self.df) < 2:
+            return None
 
-                elif signal == 'BUY_EXIT':
-                    psql.execute_query(
-                        """
-                        UPDATE equity_trade_history
-                        SET exit_ltp = :exit_ltp, 
-                            trade_exit_time = :trade_exit_time
-                        WHERE order_id = :order_id AND trade_type = 'BUY' AND exit_ltp = 0;
-                        """,
-                        params={
-                            "exit_ltp": ltp_price,
-                            "trade_exit_time": datetime.now(),
-                            "order_id": order_manager_uuid
-                        }
-                    )
-                    logging.info(f"Buy exit executed for stock_token={stock_token}")
+        last = self.df.iloc[-1]
 
-                elif signal == 'SELL_EXIT':
-                    psql.execute_query(
-                        """
-                        UPDATE equity_trade_history
-                        SET exit_ltp = :exit_ltp, 
-                            trade_exit_time = :trade_exit_time
-                        WHERE order_id = :order_id AND trade_type = 'SELL' AND exit_ltp = 0;
-                        """,
-                        params={
-                            "exit_ltp": ltp_price,
-                            "trade_exit_time": datetime.now(),
-                            "order_id": order_manager_uuid
-                        }
-                    )
-                    logging.info(f"Sell exit executed for stock_token={stock_token}")
+        short_temp = last['EMA_short']
+        middle_temp = last['EMA_medium']
+        long_temp = last['EMA_long']
 
-                # Sleep to avoid double execution in the same minute
-                time.sleep(2)
+        # timestamp = last.name  # assuming your df index is datetime
 
-            if iterations >= max_iterations:
-                logging.warning("Max iterations reached, exiting trade_function.")
+        # ENTRY: Not in any position
+        if self.last_position is None:
+            # SHORT entry
+            # if middle_temp < long_temp and short_temp < middle_temp:
+            if middle_temp < long_temp and short_temp < middle_temp and short_temp < long_temp:
+                self.last_position = 'SHORT'
+                self.last_signal = 'SELL_ENTRY'
+                print(f">> 📉 SELL_ENTRY triggered at time  {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'SELL_ENTRY'
 
-        except Exception as e:
-            logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
+            # LONG entry
+            # elif middle_temp < long_temp and short_temp > middle_temp:
+            elif middle_temp > long_temp and short_temp > middle_temp and short_temp > long_temp:
+                self.last_position = 'LONG'
+                self.last_signal = 'BUY_ENTRY'
+                print(f">> 📈 BUY_ENTRY triggered at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'BUY_ENTRY'
+
+        # EXIT from SHORT
+        elif self.last_position == 'SHORT':
+            # short_temp > middle_temp
+
+            if short_temp > middle_temp:
+                self.last_position = None
+                self.last_signal = 'SELL_EXIT'
+                print(f">> 📈 SELL_EXIT from SHORT at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'SELL_EXIT'
+
+        # EXIT from LONG
+        elif self.last_position == 'LONG':
+            # short_temp < middle_temp
+            if short_temp < middle_temp:
+                self.last_position = None
+                self.last_signal = 'BUY_EXIT'
+                print(f">> 📉 BUY_EXIT from LONG at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'BUY_EXIT'
+
+        # No signal
+        return None
+
+
+if __name__ == "__main__":
+    # smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
+    # historical_data=get_historical_data(smart_api_obj=smart_api_obj,symboltoken='3045',exchange="NSE", interval="FIVE_MINUTE", fromdate='2025-05-18 00:00', todate='2025-05-19 14:30')
+    
+    historical_data = pd.read_csv('historical_data15.csv')
+    live_data = pd.read_csv('live.csv')
+    strategy = TripleEMAStrategyOptimized()
+    strategy.load_historical_data(historical_data)
+    
+    for i in range(len(live_data)):
+        ltp_timestamp = live_data['timestamp'].iloc[i]
+        ltp_price = live_data['close'].iloc[i]
+        # print(f"Processing live data for timestamp: {ltp_timestamp} with price: {ltp_price}")
+        # print(ltp_price)
+        signal = strategy.add_live_price(ltp_timestamp, ltp_price)
+        if signal:
+            print(ltp_price)
+        # print(f"Signal: {signal}")
+        # time.sleep(1)
+        
+
+
+
+
+
+
 

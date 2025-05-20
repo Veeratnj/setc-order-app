@@ -1,0 +1,4 @@
+sell middle_temp < long_temp and short_temp < middle_temp
+buy  middle_temp < long_temp and short_temp > middle_temp
+sell exit  short_temp > middle_temp
+buy exit   short_temp < middle_temp
