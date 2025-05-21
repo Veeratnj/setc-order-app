@@ -342,7 +342,8 @@ class StrategyTrader:
                 psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
                 self.trade_function(row)
-                break  # Remove this break to process all rows
+                t = Thread(target=self.trade_function, args=(row,))
+                t.start()
 
         except Exception as e:
             logging.error("Error in run method", exc_info=True)
