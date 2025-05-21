@@ -103,6 +103,7 @@ class StrategyTrader:
             )
 
             order_manager_uuid = str(uuid4())
+            print(f"Order manager UUID: {order_manager_uuid}")
             psql.execute_query(
                 raw_sql="""
                 INSERT INTO order_manager (
@@ -254,7 +255,7 @@ class StrategyTrader:
                             "stock_token": stock_token,
                             "trade_type": "SELL",
                             "quantity": quantity,
-                            "price": 0,
+                            "price": quantity*ltp_price,
                             "entry_ltp": ltp_price,
                             "exit_ltp": 0,
                             "total_price": 0,
@@ -277,13 +278,15 @@ class StrategyTrader:
                         """
                         UPDATE equity_trade_history
                         SET exit_ltp = :exit_ltp, 
-                            trade_exit_time = :trade_exit_time
+                            trade_exit_time = :trade_exit_time,
+                            total_price = :total_price
                         WHERE order_id = :order_id AND trade_type = 'BUY' AND exit_ltp = 0;
                         """,
                         params={
                             "exit_ltp": ltp_price,
                             "trade_exit_time": datetime.now(),
-                            "order_id": order_manager_uuid
+                            "order_id": order_manager_uuid,
+                            "total_price": quantity * ltp_price
                         }
                     )
                     logging.info(f"Buy exit executed for stock_token={stock_token}")
@@ -294,13 +297,15 @@ class StrategyTrader:
                         """
                         UPDATE equity_trade_history
                         SET exit_ltp = :exit_ltp, 
-                            trade_exit_time = :trade_exit_time
+                            trade_exit_time = :trade_exit_time,
+                            total_price = :total_price
                         WHERE order_id = :order_id AND trade_type = 'SELL' AND exit_ltp = 0;
                         """,
                         params={
                             "exit_ltp": ltp_price,
                             "trade_exit_time": datetime.now(),
-                            "order_id": order_manager_uuid
+                            "order_id": order_manager_uuid,
+                            "total_price": quantity * ltp_price
                         }
                     )
                     logging.info(f"Sell exit executed for stock_token={stock_token}")

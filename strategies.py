@@ -166,126 +166,54 @@ class TripleEMAStrategyOptimized1:
         return None
 
 
-
-
-
 class TripleEMAStrategyOptimized:
+
     def __init__(self, short=5, medium=21, long=63):
         self.short = short
         self.medium = medium
         self.long = long
 
         self.df = pd.DataFrame()
+        
+
         self.last_ema_short = None
         self.last_ema_medium = None
         self.last_ema_long = None
+
         self.last_signal = None
-        self.last_position = None
+        self.last_position = None 
 
     def load_historical_data(self, raw_data):
-        self.df = pd.DataFrame(raw_data)
-        self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
-        self.df.sort_values(by='timestamp', inplace=True)
-        self.df.reset_index(drop=True, inplace=True)
+            # print(raw_data.columns)
+            """
+            Load OHLCV data and compute EMAs.
+            """
+            self.df = pd.DataFrame(raw_data)
+            self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
+            self.df.sort_values(by='timestamp', inplace=True)
+            self.df.reset_index(drop=True, inplace=True)
 
-        self.df['EMA_short'] = self.df['close'].ewm(span=self.short, adjust=False).mean()
-        self.df['EMA_medium'] = self.df['close'].ewm(span=self.medium, adjust=False).mean()
-        self.df['EMA_long'] = self.df['close'].ewm(span=self.long, adjust=False).mean()
+            # Calculate EMAs
+            self.df['EMA_short'] = self.df['close'].ewm(span=self.short, adjust=False).mean()
+            self.df['EMA_medium'] = self.df['close'].ewm(span=self.medium, adjust=False).mean()
+            self.df['EMA_long'] = self.df['close'].ewm(span=self.long, adjust=False).mean()
 
-        last_row = self.df.iloc[-1]
-        self.last_ema_short = last_row['EMA_short']
-        self.last_ema_medium = last_row['EMA_medium']
-        self.last_ema_long = last_row['EMA_long']
+            # Pick last EMA values to continue from
+            last_row = self.df.iloc[-1]
+            self.last_ema_short = last_row['EMA_short']
+            self.last_ema_medium = last_row['EMA_medium']
+            self.last_ema_long = last_row['EMA_long']
+            self.df.to_csv('t1.csv', index=False)
 
-    def generate_signals1(self):
-        signals = []
-        flag_long = False
-        flag_short = False
-
-        for i in range(len(self.df)):
-            row = self.df.iloc[i]
-            short_temp = row['EMA_short']
-            middle_temp = row['EMA_medium']
-            long_temp = row['EMA_long']
-            close_price = row['close']
-            timestamp = self.df['timestamp'].iloc[i]
-
-            # SELL Entry
-            if not flag_long and not flag_short and middle_temp < long_temp and short_temp < middle_temp:
-                signals.append("SELL_ENTRY")
-                flag_short = True
-                print(f"📉 SELL_ENTRY at {timestamp} | Price: {close_price}")
-
-            # BUY Exit (Close Short)
-            elif flag_short and short_temp > middle_temp:
-                signals.append("BUY_EXIT")
-                flag_short = False
-                print(f"📈 BUY_EXIT at {timestamp} | Price: {close_price}")
-
-            # BUY Entry
-            elif not flag_long and not flag_short and middle_temp < long_temp and short_temp > middle_temp:
-                signals.append("BUY_ENTRY")
-                flag_long = True
-                print(f"📈 BUY_ENTRY at {timestamp} | Price: {close_price}")
-
-            # SELL Exit (Close Long)
-            elif flag_long and short_temp < middle_temp:
-                signals.append("SELL_EXIT")
-                flag_long = False
-                print(f"📉 SELL_EXIT at {timestamp} | Price: {close_price}")
-
-            # No Signal
-            else:
-                signals.append(None)
-
-        self.df['Signal'] = signals
-        return self.df
-
-    def generate_signals(self):
-        if len(self.df) < 2:
-            return None
-
-        prev = self.df.iloc[-2]
-        last = self.df.iloc[-1]
-
-        short_temp = last['EMA_short']
-        middle_temp = last['EMA_medium']
-        long_temp = last['EMA_long']
-
-        # ENTRY: Not in any position
-        if self.last_position is None:
-            if middle_temp < long_temp and short_temp < middle_temp:
-                self.last_position = 'SHORT'
-                self.last_signal = 'SELL'
-                print(f"📉 SELL_ENTRY at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
-                return 'SELL_ENTRY'
-
-            elif middle_temp < long_temp and short_temp > middle_temp:
-                self.last_position = 'LONG'
-                self.last_signal = 'BUY'
-                print(f"📈 BUY_ENTRY at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
-                return 'BUY_ENTRY'
-
-        elif self.last_position == 'SHORT' and short_temp > middle_temp:
-            self.last_position = None
-            self.last_signal = None
-            print(f"📈 BUY_EXIT at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
-            return 'BUY_EXIT'
-
-        elif self.last_position == 'LONG' and short_temp < middle_temp:
-            self.last_position = None
-            self.last_signal = None
-            print(f"📉 SELL_EXIT at {last['timestamp']} | Price: {last['close']} short {short_temp} middle {middle_temp} long {long_temp}")
-            return 'SELL_EXIT'
-
-        return None
-
-
-   
     def add_live_price(self, timestamp, ltp):
+        """
+        Add new candle and calculate EMAs incrementally.
+        """
+        # print(self.df.columns)
         if self.last_ema_short is None:
-            return None
+            return None  # historical data not loaded
 
+        # EMA calculation
         alpha_short = 2 / (self.short + 1)
         alpha_medium = 2 / (self.medium + 1)
         alpha_long = 2 / (self.long + 1)
@@ -310,9 +238,65 @@ class TripleEMAStrategyOptimized:
         }
 
         self.df = pd.concat([self.df, pd.DataFrame([new_row])], ignore_index=True)
-        return self.generate_signals()  # Optional real-time signal
+        # print(new_row)
+        return self.generate_signal()
 
+    def generate_signal(self):
+        if len(self.df) < 2:
+            return None
 
+        last = self.df.iloc[-1]
+        previous = self.df.iloc[-2]
+
+        short_temp = last['EMA_short']
+        middle_temp = last['EMA_medium']
+        long_temp = last['EMA_long']
+
+        previous_short_temp = previous['EMA_short']
+        previous_middle_temp = previous['EMA_medium']
+        previous_long_temp = previous['EMA_long']
+
+        
+
+        # ENTRY: Not in any position
+        if self.last_position is None:
+            # SHORT entry
+            if ((previous_middle_temp< previous_long_temp and previous_short_temp>previous_middle_temp and previous_short_temp < previous_long_temp) and 
+                (middle_temp <long_temp and short_temp < middle_temp and short_temp < long_temp)):
+                self.last_position = 'SHORT'
+                self.last_signal = 'SELL_ENTRY'
+                print(f">> 📉 SELL_ENTRY triggered at time  {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'SELL_ENTRY'
+
+            # LONG entry
+            elif ((previous_middle_temp>previous_long_temp and previous_short_temp < previous_middle_temp and previous_short_temp > previous_long_temp) and 
+                  (middle_temp > long_temp and short_temp > middle_temp and short_temp > long_temp)):
+                self.last_position = 'LONG'
+                self.last_signal = 'BUY_ENTRY'
+                print(f">> 📈 BUY_ENTRY triggered at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'BUY_ENTRY'
+
+        # EXIT from SHORT
+        elif self.last_position == 'SHORT':
+            # short_temp > middle_temp
+
+            if short_temp > middle_temp:
+                self.last_position = None
+                self.last_signal = 'SELL_EXIT'
+                print(f">> 📈 SELL_EXIT from SHORT at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'SELL_EXIT'
+
+        # EXIT from LONG
+        elif self.last_position == 'LONG':
+            # short_temp < middle_temp
+            if short_temp < middle_temp:
+                self.last_position = None
+                self.last_signal = 'BUY_EXIT'
+                print(f">> 📉 BUY_EXIT from LONG at {ltp_timestamp} long {long_temp} middle {middle_temp} short {short_temp}")
+                return 'BUY_EXIT'
+
+        # No signal
+        return None
 
 
 if __name__ == "__main__":
@@ -323,17 +307,25 @@ if __name__ == "__main__":
     live_data = pd.read_csv('live.csv')
     strategy = TripleEMAStrategyOptimized()
     strategy.load_historical_data(historical_data)
-    # ltp_timestamp = '2025-05-19 14:35'
-    # ltp_price = 795.0
+    
     for i in range(len(live_data)):
         ltp_timestamp = live_data['timestamp'].iloc[i]
         ltp_price = live_data['close'].iloc[i]
         # print(f"Processing live data for timestamp: {ltp_timestamp} with price: {ltp_price}")
-        
+        # print(ltp_price)
         signal = strategy.add_live_price(ltp_timestamp, ltp_price)
+        if signal:
+            print(ltp_price)
         # print(f"Signal: {signal}")
         # time.sleep(1)
         
+
+
+
+
+
+
+
 
 
 

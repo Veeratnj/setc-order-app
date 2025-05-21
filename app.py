@@ -295,13 +295,15 @@ def main() -> None:
 
         ids_to_update: List[int] = [row['id'] for row in data]
         logging.info(f"Updated is_started=true for IDs: {ids_to_update}")
-
+        threads = []
         for row in data:
             sql = text("UPDATE user_active_strategy SET is_started = true, status='active' WHERE id = :id")
             psql.execute_query(sql, params={"id": row['id']})
-            trade_function(row)
-            break  # Remove this break to process all rows or use threading for parallel execution
-
+            # trade_function(row)
+            t = Thread(target=trade_function, args=(row,))
+            t.start()
+            threads.append(t)
+        logging.info(f"total threads {len(threads)}", exc_info=True)
     except Exception as e:
         logging.error("Error in main function", exc_info=True)
 
