@@ -40,4 +40,6 @@ pandas
 uvicorn[standard]
 psycopg2-binary
 yfinance
+pandas_ta
+numpy==1.24.3
 # https://smartapi.angelbroking.com/topic/45/token-with-symbol

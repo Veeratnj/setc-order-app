@@ -166,3 +166,4 @@ def execute_query(raw_sql, params=None):
         session.close()
         # logging.error(f"SQLAlchemyError: {str(e)}", exc_info=True)
         raise
+  

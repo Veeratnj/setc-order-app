@@ -1,0 +1,101 @@
+//@version=5
+strategy("5m EMA Crossover Strategy with 1h RSI Filter, ATR Trailing SL, 30m Swing TP", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// ————— Inputs —————
+emaFastLen   = input.int(9, title="Fast EMA (Short)", minval=1)
+emaMedLen    = input.int(20, title="Medium EMA")
+emaLongLen   = input.int(63, title="Long EMA")
+emaMacroLen  = input.int(120, title="Macro EMA")
+
+rsiTF        = input.timeframe("60", title="RSI Trend Timeframe")
+rsiLen       = input.int(14, title="RSI Length")
+rsiThresh    = input.int(50, title="RSI Trend Level")
+
+atrLen       = input.int(14, title="ATR Length")
+atrMult      = input.float(2.0, title="ATR Trailing SL Multiplier", minval=0.1, step=0.1)
+
+riskPercent  = input.float(1.0, title="Risk % per Trade", minval=0.1)
+rewardRR     = input.float(2.0, title="Reward:Risk Ratio", minval=0.5)
+
+swingLookback = input.int(30, title="30m Swing Lookback Bars", minval=5)
+
+// ————— Time Filter —————
+inSession = (timestamp("Asia/Kolkata", year, month, dayofmonth, 9, 15) <= time and time <= timestamp("Asia/Kolkata", year, month, dayofmonth, 13, 15))
+exitTime  = (time == timestamp("Asia/Kolkata", year, month, dayofmonth, 14, 25))
+
+// ————— Indicators —————
+emaFast  = ta.ema(close, emaFastLen)
+emaMed   = ta.ema(close, emaMedLen)
+emaLong  = ta.ema(close, emaLongLen)
+emaMacro = ta.ema(close, emaMacroLen)
+
+rsi1h    = request.security(syminfo.tickerid, rsiTF, ta.rsi(close, rsiLen))
+atr      = ta.atr(atrLen)
+
+// ————— Trend Filter —————
+isLongTrend  = rsi1h > rsiThresh
+isShortTrend = rsi1h < rsiThresh
+
+// ————— Swing High/Low —————
+swingHigh = ta.highest(high, swingLookback)
+swingLow  = ta.lowest(low, swingLookback)
+
+// ————— Entry Conditions —————
+longCond  = ta.crossover(emaFast, emaMed) and emaMed > emaLong and emaLong > emaMacro and isLongTrend and inSession
+shortCond = ta.crossunder(emaFast, emaMed) and emaMed < emaLong and emaLong < emaMacro and isShortTrend and inSession
+
+// ————— Risk Calculation —————
+stopLossLong  = close - atr * atrMult
+stopLossShort = close + atr * atrMult
+
+riskAmt       = strategy.equity * (riskPercent / 100)
+qtyLong       = riskAmt / (close - stopLossLong)
+qtyShort      = riskAmt / (stopLossShort - close)
+
+takeProfitLong  = close + (close - stopLossLong) * rewardRR
+takeProfitShort = close - (stopLossShort - close) * rewardRR
+
+// ————— Entry Orders —————
+if (longCond)
+    strategy.entry("Long", strategy.long, qty=qtyLong)
+if (shortCond)
+    strategy.entry("Short", strategy.short, qty=qtyShort)
+
+// ————— Trailing SL & Swing TP —————
+long_trailing_sl  = close - atr * atrMult
+short_trailing_sl = close + atr * atrMult
+
+strategy.exit("Long Exit", from_entry="Long", stop=long_trailing_sl, limit=math.min(takeProfitLong, swingHigh))
+strategy.exit("Short Exit", from_entry="Short", stop=short_trailing_sl, limit=math.max(takeProfitShort, swingLow))
+
+// ————— Time-Based Forced Exit —————
+if (exitTime and strategy.opentrades > 0)
+    strategy.close_all(comment="Timed Exit")
+
+// ————— Plotting EMAs —————
+plot(emaFast, color=color.green, title="EMA 9")
+plot(emaMed, color=color.white, title="EMA 20")
+plot(emaLong, color=color.orange, title="EMA 63")
+plot(emaMacro, color=color.red, title="EMA 120")
+
+// ————— Manual Trade Tracking for R:R Labels —————
+var float entryPrice = na
+var bool isLongTrade = na
+
+if (longCond)
+    entryPrice := close
+    isLongTrade := true
+if (shortCond)
+    entryPrice := close
+    isLongTrade := false
+
+if (strategy.opentrades == 0 and not na(entryPrice))
+    exitPrice = close
+    rr = isLongTrade ? (exitPrice - entryPrice) / (entryPrice - (entryPrice - atr * atrMult)) : (entryPrice - exitPrice) / ((entryPrice + atr * atrMult) - entryPrice)
+ 
+
+// ————— Plot Trailing SL and TP Levels —————
+plot(strategy.position_size > 0 ? long_trailing_sl : na, title="Long TSL", color=color.aqua, style=plot.style_linebr)
+plot(strategy.position_size < 0 ? short_trailing_sl : na, title="Short TSL", color=color.orange, style=plot.style_linebr)
+plot(strategy.position_size > 0 ? math.min(takeProfitLong, swingLow) : na, title="Long TP", color=color.purple, style=plot.style_linebr)
+plot(strategy.position_size < 0 ? math.max(takeProfitShort, swingHigh) : na, title="Short TP", color=color.teal, style=plot.style_linebr)

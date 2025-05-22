@@ -17,7 +17,8 @@ from creds import *
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
-from strategies import TripleEMAStrategyOptimized
+# from strategies import TripleEMAStrategyOptimized
+from temp2 import TripleEMAStrategyOptimized, candles_builder
 
 class StrategyTrader:
     def __init__(self):
@@ -77,6 +78,7 @@ class StrategyTrader:
             logging.error(f"Database query failed for LTP: {str(e)}", exc_info=True)
             raise
 
+    
     def is_market_open(self):
         """Returns True if current time is within trading hours (e.g., 9:15 to 15:30). Adjust as needed."""
         now = datetime.now()
@@ -168,7 +170,10 @@ class StrategyTrader:
                     time.sleep(2)
                     continue
 
-                signal = strategy.add_live_price(ltp_timestamp, ltp_price)
+                # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
+                open_, high, low, close, end_time = candles_builder(stock_token, 60)
+                strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=end_time)
+                signal = strategy.generate_signal()
                 logging.info(f"Signal generated: {signal}")
 
                 if signal == 'BUY_ENTRY':
