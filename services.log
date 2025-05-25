@@ -1,0 +1,40 @@
+2025-05-24 18:06:09,880 INFO:Authenticating with Angel One API...
+2025-05-24 18:06:10,698 INFO:Authentication successful.
+2025-05-24 18:06:10,698 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 18:06:10,878 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 18:06:49,824 INFO:Authenticating with Angel One API...
+2025-05-24 18:06:50,361 INFO:Authentication successful.
+2025-05-24 18:06:50,361 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 18:06:50,595 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 18:08:00,136 INFO:Authenticating with Angel One API...
+2025-05-24 18:08:01,319 INFO:Authentication successful.
+2025-05-24 18:08:01,319 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 18:08:01,497 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 18:09:00,726 INFO:Authenticating with Angel One API...
+2025-05-24 18:09:01,453 INFO:Authentication successful.
+2025-05-24 18:09:01,453 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 18:09:01,613 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 19:48:13,233 INFO:Authenticating with Angel One API...
+2025-05-24 19:48:14,286 INFO:Authentication successful.
+2025-05-24 19:48:14,286 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 19:48:14,534 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 19:49:29,320 INFO:Authenticating with Angel One API...
+2025-05-24 19:49:29,947 INFO:Authentication successful.
+2025-05-24 19:49:29,947 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 19:49:30,359 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-24 20:07:59,681 INFO:Authenticating with Angel One API...
+2025-05-24 20:08:00,344 INFO:Authentication successful.
+2025-05-24 20:08:00,344 INFO:Fetching historical data for symboltoken=3045, interval=FIVE_MINUTE
+2025-05-24 20:08:00,514 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-25 15:13:22,274 INFO:Authenticating with Angel One API...
+2025-05-25 15:13:22,854 INFO:Authentication successful.
+2025-05-25 15:13:22,854 INFO:Fetching historical data for symboltoken=1406, interval=FIVE_MINUTE
+2025-05-25 15:13:22,998 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-25 15:16:10,450 INFO:Authenticating with Angel One API...
+2025-05-25 15:16:10,949 INFO:Authentication successful.
+2025-05-25 15:16:10,949 INFO:Fetching historical data for symboltoken=1406, interval=FIVE_MINUTE
+2025-05-25 15:16:11,150 INFO:Historical data fetched and saved to historical_data.csv.
+2025-05-25 17:11:47,822 INFO:Authenticating with Angel One API...
+2025-05-25 17:11:48,356 INFO:Authentication successful.
+2025-05-25 17:11:48,356 INFO:Fetching historical data for symboltoken=1406, interval=FIVE_MINUTE
+2025-05-25 17:11:48,530 INFO:Historical data fetched and saved to historical_data.csv.
