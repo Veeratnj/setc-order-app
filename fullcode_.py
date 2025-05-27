@@ -41,6 +41,11 @@ class TripleEMAStrategyOptimized:
         self.df['ema_macro'] = ta.ema(self.df['close'], length=self.ema_macro_len)
         self.df['ema_ultra_len'] = ta.ema(self.df['close'], length=self.ema_ultra_len)
         self.df['rsi'] = ta.rsi(self.df['close'], length=self.rsi_len)
+        # Add column with last 6 RSI values as a list
+        self.df['rsi_last_6_avg'] = self.df['rsi'].rolling(window=6).mean()
+
+
+
         self.df['atr'] = ta.atr(self.df['high'], self.df['low'], self.df['close'], length=self.atr_len)
         self.df['swing_high'] = self.df['high'].rolling(self.swing_lookback).max()
         self.df['swing_low'] = self.df['low'].rolling(self.swing_lookback).min()
@@ -79,63 +84,7 @@ class TripleEMAStrategyOptimized:
         self.df['exit_time'] = self.df['timestamp'].dt.time == pd.to_datetime("22:25").time()
 
         # Save processed data
-        self.df.to_csv('processed_historical_data.csv', index=False)
-
-
-    def load_historical_data1(self, raw_data):
-        self.df = pd.DataFrame(raw_data)
-        self.df['timestamp'] = pd.to_datetime(self.df['timestamp'])
-        self.df.sort_values(by='timestamp', inplace=True)
-        self.df.reset_index(drop=True, inplace=True)
-
-        # Calculate indicators
-        self.df['ema_fast'] = ta.ema(self.df['close'], length=self.ema_fast_len)
-        self.df['ema_med'] = ta.ema(self.df['close'], length=self.ema_med_len)
-        self.df['ema_long'] = ta.ema(self.df['close'], length=self.ema_long_len)
-        self.df['ema_macro'] = ta.ema(self.df['close'], length=self.ema_macro_len)
-        self.df['ema_ultra_len'] = ta.ema(self.df['close'], length=self.ema_ultra_len)
-        self.df['rsi'] = ta.rsi(self.df['close'], length=self.rsi_len)
-        self.df['atr'] = ta.atr(self.df['high'], self.df['low'], self.df['close'], length=self.atr_len)
-        self.df['swing_high'] = self.df['high'].rolling(self.swing_lookback).max()
-        self.df['swing_low'] = self.df['low'].rolling(self.swing_lookback).min()
-
-        # Round indicator values to 2 decimal places
-        round_cols = [
-            'ema_fast', 'ema_med', 'ema_long', 'ema_macro', 'ema_ultra_len',
-            'rsi', 'atr', 'swing_high', 'swing_low'
-        ]
-        self.df[round_cols] = self.df[round_cols].round(2)
-
-        # Set timezone to Asia/Kolkata (ensure timestamp is tz-aware)
-        # self.df['timestamp'] = self.df['timestamp'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
-        if self.df['timestamp'].dt.tz is None:
-            self.df['timestamp'] = self.df['timestamp'].dt.tz_localize('UTC').dt.tz_convert('Asia/Kolkata')
-        else:
-            self.df['timestamp'] = self.df['timestamp'].dt.tz_convert('Asia/Kolkata')
-
-        # Session: 9:15 AM to 1:15 PM IST
-        self.df['in_session'] = self.df['timestamp'].dt.time.between(
-            pd.to_datetime("09:15").time(),
-            pd.to_datetime("13:15").time()
-        )
-
-        # RSI trend from higher timeframe
-        df_rsi = self.df.set_index('timestamp')
-        rsi_1h = df_rsi['close'].resample(self.rsi_trend_tf.replace('m', 'min')).last()
-        rsi_1h = ta.rsi(rsi_1h, length=self.rsi_len)
-        rsi_1h = rsi_1h.reindex(self.df['timestamp'], method='ffill').reset_index(drop=True)
-        self.df['rsi_trend'] = rsi_1h.round(2)
-
-        # Trend filters
-        self.df['isLongTrend'] = self.df['rsi_trend'] > self.rsi_thresh
-        self.df['isShortTrend'] = self.df['rsi_trend'] < self.rsi_thresh
-
-        # Exit time: 14:25 IST
-        self.df['exit_time'] = self.df['timestamp'].dt.time == pd.to_datetime("14:25").time()
-
-        # Save to CSV
-        self.df.to_csv('processed_historical_data.csv', index=False)
-
+        # self.df.to_csv('processed_historical_data.csv', index=False)
 
     def add_live_data(self, timestamp, open_, high, low, close, volume):
         # Parse the timestamp with timezone awareness
@@ -169,6 +118,10 @@ class TripleEMAStrategyOptimized:
 
         rsi_series = ta.rsi(self.df['close'], length=self.rsi_len).round(2)
         self.df.at[idx, 'rsi'] = rsi_series.iloc[-1] if rsi_series is not None else None
+
+        # Calculate rolling average RSI over last 6 candles (including new)
+        self.df['rsi_last_6_avg'] = self.df['rsi'].rolling(window=6).mean().round(2)
+        self.df.at[idx, 'rsi_last_6_avg'] = self.df['rsi_last_6_avg'].iloc[-1]
 
         atr_series = ta.atr(self.df['high'], self.df['low'], self.df['close'], length=self.atr_len).round(2)
         self.df.at[idx, 'atr'] = atr_series.iloc[-1] if atr_series is not None else None
@@ -284,36 +237,40 @@ class TripleEMAStrategyOptimized:
             Short Trend: {last['isShortTrend']}
             -----------------------------
             """)
-            input("Press Enter to continue...")
+            # input("Press Enter to continue...")
 
             if long_cond:
                 self.last_position = 'LONG'
-                self.last_signal = {
-                    'signal': 'BUY_ENTRY',
-                    'qty': qty_long,
-                    'stop_loss': stop_loss_long,
-                    'take_profit': min(take_profit_long, last['swing_high'])
-                }
+                # self.last_signal = {
+                #     'signal': 'BUY_ENTRY',
+                #     'qty': qty_long,
+                #     'stop_loss': stop_loss_long,
+                #     'take_profit': min(take_profit_long, last['swing_high'])
+                # }
+                self.last_signal= 'BUY_ENTRY'
                 return self.last_signal
             elif short_cond:
                 self.last_position = 'SHORT'
-                self.last_signal = {
-                    'signal': 'SELL_ENTRY',
-                    'qty': qty_short,
-                    'stop_loss': stop_loss_short,
-                    'take_profit': max(take_profit_short, last['swing_low'])
-                }
+                # self.last_signal = {
+                #     'signal': 'SELL_ENTRY',
+                #     'qty': qty_short,
+                #     'stop_loss': stop_loss_short,
+                #     'take_profit': max(take_profit_short, last['swing_low'])
+                # }
+                self.last_signal = 'SELL_ENTRY'
                 return self.last_signal
         elif self.last_position == 'LONG':
             # Exit if price hits stop loss or take profit
             if last['low'] <= stop_loss_long or last['high'] >= min(take_profit_long, last['swing_high']):
                 self.last_position = None
                 self.last_signal = {'signal': 'BUY_EXIT'}
+                self.last_signal= 'BUY_EXIT'
                 return self.last_signal
         elif self.last_position == 'SHORT':
             if last['high'] >= stop_loss_short or last['low'] <= max(take_profit_short, last['swing_low']):
                 self.last_position = None
                 self.last_signal = {'signal': 'SELL_EXIT'}
+                self.last_signal = 'SELL_EXIT'
                 return self.last_signal
 
         return None
@@ -340,4 +297,5 @@ if __name__ == "__main__":
       
         if signal:
             print('signal ',signal)
-    strategy.df.to_csv('hind_petro_processed_live_data.csv', index=False)
+    print(strategy.df.columns)
+    # strategy.df.to_csv('hind_petro_processed_live_data.csv', index=False)

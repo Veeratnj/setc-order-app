@@ -95,8 +95,8 @@ def get_historical_data(
         # data_df['buy_exit'] = np.nan
         # data_df['sell_exit'] = np.nan
 
-        data_df.to_csv('hind_petro_historical_data.csv', index=False)
-        logging.info("Historical data fetched and saved to historical_data.csv.")
+        # data_df.to_csv('hind_petro_historical_data.csv', index=False)
+        logging.info("Historical data fetched ")
         return data_df
     except Exception as e:
         logging.error(f"An error occurred while fetching historical data: {str(e)}", exc_info=True)

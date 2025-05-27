@@ -18,7 +18,8 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List
 
 # from strategies import TripleEMAStrategyOptimized
-from temp2 import TripleEMAStrategyOptimized, candles_builder
+from fullcode_ import TripleEMAStrategyOptimized
+from temp2 import candles_builder
 
 class StrategyTrader:
     def __init__(self):
@@ -141,8 +142,10 @@ class StrategyTrader:
                 exchange="NSE",
                 symboltoken=stock_token,
                 interval="FIVE_MINUTE",
-                fromdate='2025-05-16 08:11',
-                todate='2025-05-17 08:11'
+                # fromdate='2025-05-15 08:11',
+                fromdate=fromdate,
+                # todate='2025-05-26 08:11'
+                todate=todate
             )
             if historical_df is None or historical_df.empty:
                 logging.error("No historical data found, aborting trade_function.")
@@ -341,10 +344,12 @@ class StrategyTrader:
 
             ids_to_update: List[int] = [row['id'] for row in data]
             logging.info(f"Updated is_started=true for IDs: {ids_to_update}")
+            print(len(data))
+            time.sleep(2)
 
             for row in data:
-                sql = text("UPDATE user_active_strategy SET is_started = true, status='active' WHERE id = :id")
-                psql.execute_query(sql, params={"id": row['id']})
+                # sql = text("UPDATE user_active_strategy SET is_started = true, status='active' WHERE id = :id")
+                # psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
                 self.trade_function(row)
                 t = Thread(target=self.trade_function, args=(row,))
