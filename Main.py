@@ -176,7 +176,7 @@ class StrategyTrader:
                 # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
                 open_, high, low, close, end_time = candles_builder(stock_token, 60)
                 strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=end_time)
-                signal = strategy.generate_signal()
+                signal,stop_loss = strategy.generate_signal()
                 logging.info(f"Signal generated: {signal}")
 
                 if signal == 'BUY_ENTRY':
@@ -348,8 +348,8 @@ class StrategyTrader:
             time.sleep(2)
 
             for row in data:
-                # sql = text("UPDATE user_active_strategy SET is_started = true, status='active' WHERE id = :id")
-                # psql.execute_query(sql, params={"id": row['id']})
+                sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
+                psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
                 self.trade_function(row)
                 t = Thread(target=self.trade_function, args=(row,))

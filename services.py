@@ -95,7 +95,7 @@ def get_historical_data(
         # data_df['buy_exit'] = np.nan
         # data_df['sell_exit'] = np.nan
 
-        # data_df.to_csv('hind_petro_historical_data.csv', index=False)
+        data_df.to_csv('ind_live.csv', index=False)
         logging.info("Historical data fetched ")
         return data_df
     except Exception as e:

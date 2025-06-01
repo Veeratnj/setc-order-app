@@ -350,10 +350,10 @@ if __name__ == "__main__":
     get_historical_data(
         smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
         exchange="NSE",
-        symboltoken='1406',
+        symboltoken='1512',
         interval="FIVE_MINUTE",
-        fromdate='2025-05-15 08:11',
-        todate='2025-05-23 20:11'
+        fromdate='2025-05-30 08:11',
+        todate='2025-05-30 20:11'
     )
     exit()
     historical_data = pd.read_csv('historical_data.csv')
