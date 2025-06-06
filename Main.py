@@ -23,6 +23,7 @@ from temp2 import candles_builder
 
 class StrategyTrader:
     def __init__(self):
+        self.smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
         pass
 
     def place_order(self,order_params: Dict[str, Any], user_id: int, stock_token: str) -> None:
@@ -85,7 +86,7 @@ class StrategyTrader:
         now = datetime.now()
         market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
         market_close = now.replace(hour=15, minute=25, second=0, microsecond=0)
-        return True
+        # return True
         return market_open <= now <= market_close
 
     def trade_function(self, row: Dict[str, Any]) -> None:
@@ -131,14 +132,14 @@ class StrategyTrader:
             print(f"Order manager UUID: {order_manager_uuid}")
 
             # --- Initialize historical data and strategy ---
-            smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
+            # smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
             today = datetime.now()
             fromdate = (today - timedelta(days=10)).strftime("%Y-%m-%d %H:%M")
             todate = today.strftime("%Y-%m-%d %H:%M")
             print(f"Fetching historical data from {fromdate} to {todate}")
             # 5/0
             historical_df = get_historical_data(
-                smart_api_obj=smart_api_obj,
+                smart_api_obj=self.smart_api_obj,
                 exchange="NSE",
                 symboltoken=stock_token,
                 interval="FIVE_MINUTE",
@@ -151,7 +152,7 @@ class StrategyTrader:
                 logging.error("No historical data found, aborting trade_function.")
                 return
 
-            strategy = TripleEMAStrategyOptimized()
+            strategy = TripleEMAStrategyOptimized(token=stock_token,)
             strategy.load_historical_data(historical_df)
 
             def is_time_window():
@@ -160,8 +161,8 @@ class StrategyTrader:
                 return now.minute % 1 == 0 and now.second < 3
             open_order=False
             while (trade_count > 0 and self.is_market_open()) or open_order:
-                while not is_time_window() and self.is_market_open():
-                    time.sleep(0.5)
+                # while not is_time_window() and self.is_market_open():
+                #     time.sleep(0.5)
                 if not self.is_market_open():
                     logging.info("Market closed. Exiting trade_function.")
                     break
@@ -174,12 +175,25 @@ class StrategyTrader:
                     continue
 
                 # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
-                open_, high, low, close, end_time = candles_builder(stock_token, 60)
+                open_, high, low, close, end_time = candles_builder(stock_token, )
                 strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=end_time)
                 signal,stop_loss = strategy.generate_signal()
                 logging.info(f"Signal generated: {signal}")
 
                 if signal == 'BUY_ENTRY':
+                    print('BUY_ENTRY signal received')
+                    print({
+                            "order_id": order_manager_uuid,
+                            "stock_token": stock_token,
+                            "trade_type": "buy",
+                            "quantity": quantity,
+                            "price": 0,
+                            "entry_ltp": ltp_price,
+                            "exit_ltp": 0,
+                            "total_price": 0,
+                            "trade_entry_time": datetime.now(),
+                            "trade_exit_time": None
+                        })
                     open_order=True
                     trade_count -= 1
                     order_params = {
@@ -208,7 +222,7 @@ class StrategyTrader:
                         params={
                             "order_id": order_manager_uuid,
                             "stock_token": stock_token,
-                            "trade_type": "BUY",
+                            "trade_type": "buy",
                             "quantity": quantity,
                             "price": 0,
                             "entry_ltp": ltp_price,
@@ -226,12 +240,33 @@ class StrategyTrader:
                         """,
                         params={"order_id": order_manager_uuid}
                     )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE user_active_strategy
+                        SET status = 'active'
+                        WHERE id = :id;
+                        """,
+                        params={"id": row['id']}
+                    )
 
                 elif signal == 'SELL_ENTRY':
-                    print((trade_count > 0 and self.is_market_open()) or open_order)
-                    print(trade_count)
-                    print(self.is_market_open())
-                    print(open_order)
+                    print('SELL_ENTRY signal received')
+                    print({
+                            "order_id": order_manager_uuid,
+                            "stock_token": stock_token,
+                            "trade_type": "sell",
+                            "quantity": quantity,
+                            "price": quantity*ltp_price,
+                            "entry_ltp": ltp_price,
+                            "exit_ltp": 0,
+                            "total_price": 0,
+                            "trade_entry_time": datetime.now(),
+                            "trade_exit_time": None
+                        })
+                    # print((trade_count > 0 and self.is_market_open()) or open_order)
+                    # print(trade_count)
+                    # print(self.is_market_open())
+                    # print(open_order)
                     open_order=True
                     
                     trade_count -= 1
@@ -261,7 +296,7 @@ class StrategyTrader:
                         params={
                             "order_id": order_manager_uuid,
                             "stock_token": stock_token,
-                            "trade_type": "SELL",
+                            "trade_type": "sell",
                             "quantity": quantity,
                             "price": quantity*ltp_price,
                             "entry_ltp": ltp_price,
@@ -279,8 +314,17 @@ class StrategyTrader:
                         """,
                         params={"order_id": order_manager_uuid}
                     )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE user_active_strategy
+                        SET status = 'active'
+                        WHERE id = :id;
+                        """,
+                        params={"id": row['id']}
+                    )
 
                 elif signal == 'BUY_EXIT':
+                    print
                     open_order=False
                     psql.execute_query(
                         """
@@ -288,7 +332,7 @@ class StrategyTrader:
                         SET exit_ltp = :exit_ltp, 
                             trade_exit_time = :trade_exit_time,
                             total_price = :total_price
-                        WHERE order_id = :order_id AND trade_type = 'BUY' AND exit_ltp = 0;
+                        WHERE order_id = :order_id AND trade_type = 'buy' AND exit_ltp = 0;
                         """,
                         params={
                             "exit_ltp": ltp_price,
@@ -297,9 +341,18 @@ class StrategyTrader:
                             "total_price": quantity * ltp_price
                         }
                     )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE user_active_strategy
+                        SET status = 'close'
+                        WHERE id = :id;
+                        """,
+                        params={"id": row['id']}
+                    )
                     logging.info(f"Buy exit executed for stock_token={stock_token}")
 
                 elif signal == 'SELL_EXIT':
+                    print('sell exit signal received')
                     open_order=False
                     psql.execute_query(
                         """
@@ -307,7 +360,7 @@ class StrategyTrader:
                         SET exit_ltp = :exit_ltp, 
                             trade_exit_time = :trade_exit_time,
                             total_price = :total_price
-                        WHERE order_id = :order_id AND trade_type = 'SELL' AND exit_ltp = 0;
+                        WHERE order_id = :order_id AND trade_type = 'sell' AND exit_ltp = 0;
                         """,
                         params={
                             "exit_ltp": ltp_price,
@@ -315,6 +368,14 @@ class StrategyTrader:
                             "order_id": order_manager_uuid,
                             "total_price": quantity * ltp_price
                         }
+                    )
+                    psql.execute_query(
+                        raw_sql="""
+                        UPDATE user_active_strategy
+                        SET status = 'close'
+                        WHERE id = :id;
+                        """,
+                        params={"id": row['id']}
                     )
                     logging.info(f"Sell exit executed for stock_token={stock_token}")
 
@@ -351,9 +412,10 @@ class StrategyTrader:
                 sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
                 psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
-                self.trade_function(row)
+                # self.trade_function(row)
                 t = Thread(target=self.trade_function, args=(row,))
                 t.start()
+                print(f"Starting thread for user_id={row['user_id']}, strategy_id={row['strategy_id']}, token={row['stock_token']}")
 
         except Exception as e:
             logging.error("Error in run method", exc_info=True)

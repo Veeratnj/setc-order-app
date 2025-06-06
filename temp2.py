@@ -313,7 +313,7 @@ def get_latest_ltp(stock_token: str):
     except Exception as e:
         raise
 
-def candles_builder(token: str, interval: int):
+def candles_builder(token: str, interval: int=300):
     """
     Builds OHLC candle for the given token over the specified interval (in seconds),
     using Python's current time instead of database timestamps.

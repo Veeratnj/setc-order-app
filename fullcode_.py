@@ -9,6 +9,8 @@ class TripleEMAStrategyOptimized:
                  atr_len=14, atr_mult=2.5,
                  risk_percent=1.0, reward_rr=2.0,
                  swing_lookback=30,
+                 token='token None',
+                 stock_symbol='symbol None',
                  rsi_trend_tf='30min',):
         self.ema_fast_len = ema_fast_len
         self.ema_med_len = ema_med_len
@@ -28,6 +30,8 @@ class TripleEMAStrategyOptimized:
         self.df = pd.DataFrame()
         self.last_signal = None
         self.last_position = None
+        self.token = token
+        self.stock_symbol = stock_symbol
     
     def update_trailing_stop_loss(self):
         if self.position is None:
@@ -117,7 +121,7 @@ class TripleEMAStrategyOptimized:
         TripleEMAStrategyOptimized.calculate_to_60_minute(self=self)
 
         # Save processed data
-        self.df.to_csv('atr4.csv', index=False)
+        self.df.to_csv(f'{self.token}.csv', index=False)
 
     def add_live_data(self, timestamp, open_, high, low, close, volume):
         # Parse the timestamp with timezone awareness
@@ -244,6 +248,8 @@ class TripleEMAStrategyOptimized:
         with open("condition_log.txt", "a") as f:
             f.write(f"""
         ================= Condition Evaluation =================
+        token: {self.token}
+        stock_symbol: {self.stock_symbol}
         last position: {self.last_position}
 
         Previous EMAs:
@@ -325,7 +331,7 @@ class TripleEMAStrategyOptimized:
                 stop_loss = last['high'] - self.atr_mult * last['atr']
                 self.last_signal= 'BUY_ENTRY',stop_loss
                 print(f"BUY ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
-                input("Press Enter to continue...")
+                # input("Press Enter to continue...")
                 return self.last_signal
             elif short_cond:
                 self.last_position = 'SHORT'
@@ -338,8 +344,8 @@ class TripleEMAStrategyOptimized:
                 # }
                 
                 stop_loss = last['low'] + self.atr_mult * last['atr']
-                print(f"BUY ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
-                input("Press Enter to continue...")
+                print(f"SELL ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
+                # input("Press Enter to continue...")
                 self.last_signal = 'SELL_ENTRY',stop_loss
                 return self.last_signal
         elif self.last_position == 'LONG':
@@ -352,13 +358,14 @@ class TripleEMAStrategyOptimized:
                 # self.last_signal = {'signal': 'BUY_EXIT'}
                 self.last_signal= 'BUY_EXIT'
                 print(f"BUY exit: {last['timestamp']} {last['close']},")
-                input("Press Enter to continue...")
+                # input("Press Enter to continue...")
                 return self.last_signal,None
         elif self.last_position == 'SHORT':
             # if last['high'] >= stop_loss_short or last['high'] <= max(take_profit_short, last['swing_low']):
             if sell_exit_cond:
                 self.last_position = None
                 # self.last_signal = {'signal': 'SELL_EXIT'}
+                print(f"BUY exit: {last['timestamp']} {last['close']},")
                 self.last_signal = 'SELL_EXIT'
                 return self.last_signal,None
 
