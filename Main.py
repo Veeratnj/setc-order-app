@@ -160,12 +160,12 @@ class StrategyTrader:
                 # Adjust this logic for your timeframe (5min, 1min, 30sec, etc.)
                 return now.minute % 1 == 0 and now.second < 3
             open_order=False
-            while (trade_count > 0 and self.is_market_open()) or open_order:
+            while (trade_count > 0 and True) or open_order:
                 # while not is_time_window() and self.is_market_open():
                 #     time.sleep(0.5)
                 if not self.is_market_open():
                     logging.info("Market closed. Exiting trade_function.")
-                    break
+                    continue
 
                 try:
                     ltp_timestamp, ltp_price = self.get_latest_ltp(stock_token)
