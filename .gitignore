@@ -6,3 +6,10 @@ __pycache__/
 trading.log
 trading11.log
 trading12.log
+old/
+logs/
+
+*.log
+*.csv
+*.txt
+services.log

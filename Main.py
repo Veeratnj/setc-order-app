@@ -40,6 +40,25 @@ class StrategyTrader:
             logging.error(f"Failed to place order for user_id={user_id}, stock_token={stock_token} - {str(e)}", exc_info=True)
             return None
 
+    def get_ohlc(self, token, time_frame):
+        '''
+        Get the latest OHLC candle for a given token.
+        Note: time_frame is not yet used.
+        '''
+        query = text('SELECT * FROM ohlc_data WHERE token = :token ORDER BY id DESC, start_time DESC LIMIT 1')
+        ohlc_rows = psql.execute_query(raw_sql=query, params={"token": token})
+
+        if not ohlc_rows:
+            return None  # or raise an exception if you prefer
+
+        ohlc_row = ohlc_rows[0]
+
+        # Assuming ohlc_row is a tuple in this exact column order:
+        # id, token, start_time, open, high, low, close, interval, created_at
+        _, _, start_time, open_price, high_price, low_price, close_price, _, _ = ohlc_row
+
+        return start_time, open_price, high_price, low_price, close_price
+
     def fetch_from_db(self,query: str, params: Dict[str, Any], error_message: str) -> Dict[str, Any]:
         """Helper function to fetch data from the database."""
         try:
@@ -160,6 +179,7 @@ class StrategyTrader:
                 # Adjust this logic for your timeframe (5min, 1min, 30sec, etc.)
                 return now.minute % 1 == 0 and now.second < 3
             open_order=False
+            previous_candle_time=None
             while (trade_count > 0 and True) or open_order:
                 # while not is_time_window() and self.is_market_open():
                 #     time.sleep(0.5)
@@ -175,8 +195,13 @@ class StrategyTrader:
                     continue
 
                 # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
-                open_, high, low, close, end_time = candles_builder(stock_token, )
-                strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=end_time)
+                # open_, high, low, close, end_time = candles_builder(stock_token, )
+                start_time,open_, high, low, close = self.get_ohlc(token=stock_token,time_frame=None )
+                if start_time == previous_candle_time:
+                    previous_candle_time=start_time
+                    continue
+                previous_candle_time=start_time
+                strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=start_time)
                 signal,stop_loss = strategy.generate_signal()
                 logging.info(f"Signal generated: {signal}")
 
