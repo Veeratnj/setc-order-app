@@ -153,14 +153,14 @@ class TripleEMAStrategyOptimized:
             ema_series = ta.ema(self.df['close'], length=length).round(2)
             self.df.at[idx, name] = ema_series.iloc[-1] if ema_series is not None else None
 
-        rsi_series = ta.rsi(self.df['close'], length=self.rsi_len).round(2)
+        rsi_series = ta.rsi(self.df['close'].astype(float), length=self.rsi_len).round(2)
         self.df.at[idx, 'rsi'] = rsi_series.iloc[-1] if rsi_series is not None else None
 
         # Calculate rolling average RSI over last 6 candles (including new)
         # self.df['rsi_last_6_avg'] = self.df['rsi'].rolling(window=6).mean().round(2)
         # self.df.at[idx, 'rsi_last_6_avg'] = self.df['rsi_last_6_avg'].iloc[-1]
 
-        atr_series = (ta.atr(self.df['high'], self.df['low'], self.df['close'], length=self.atr_len).round(2))*self.atr_mult
+        atr_series = (ta.atr(self.df['high'].astype(float), self.df['low'].astype(float), self.df['close'].astype(float), length=self.atr_len).round(2))*self.atr_mult
         self.df.at[idx, 'atr'] = atr_series.iloc[-1] if atr_series is not None else None
 
         self.df.at[idx, 'swing_high'] = self.df['high'].rolling(self.swing_lookback).max().iloc[-1]
@@ -182,6 +182,7 @@ class TripleEMAStrategyOptimized:
 
         df_rsi = df_rsi.sort_index()  # Ensure the index is sorted before resampling
         rsi_1h = df_rsi['close'].resample(self.rsi_trend_tf.lower()).last()
+        rsi_1h = rsi_1h.dropna().astype(float)
         rsi_1h = ta.rsi(rsi_1h, length=self.rsi_len).round(2)
 
         # Get latest RSI trend value for current timestamp
@@ -230,16 +231,26 @@ class TripleEMAStrategyOptimized:
         )
 
         # Risk calculation
-        stop_loss_long = last['high'] - last['atr'] 
-        stop_loss_short = last['low'] + last['atr'] 
+        stop_loss_long = float(last['high']) - float(last['atr'])
+        stop_loss_short = float(last['low']) + float(last['atr']) 
         # stop_loss_long = last['high'] - last['atr'] * self.atr_mult
         # stop_loss_short = last['low'] + last['atr'] * self.atr_mult
         # risk_amt = 100000 * (self.risk_percent / 100)  # Example: 100k capital
         risk_amt = self.base_amount * (self.risk_percent / 100)  # Example: 100k capital
         # qty_long = risk_amt / (last['close'] - stop_loss_long) if (last['close'] - stop_loss_long) != 0 else 0
         # qty_short = risk_amt / (stop_loss_short - last['close']) if (stop_loss_short - last['close']) != 0 else 0
-        take_profit_long = last['close'] + (last['close'] - stop_loss_long) * self.reward_rr
-        take_profit_short = last['close'] - (stop_loss_short - last['close']) * self.reward_rr
+        # take_profit_long = last['close'] + (last['close'] - stop_loss_long) * self.reward_rr
+        # take_profit_short = last['close'] - (stop_loss_short - last['close']) * self.reward_rr
+        close_val = float(last['close'])
+        stop_loss_val = float(stop_loss_long)
+        take_profit_long = close_val + (close_val - stop_loss_val) * float(self.reward_rr)
+        close_val = float(last['close'])
+        stop_loss_val = float(stop_loss_short)
+
+        take_profit_short = close_val - (stop_loss_val - close_val) * float(self.reward_rr)
+
+
+        
 
         bue_exit_cond = (last['low'] <= stop_loss_long or last['low'] >= min(take_profit_long, last['swing_high']))
         sell_exit_cond = (last['high'] >= stop_loss_short or last['high'] <= max(take_profit_short, last['swing_low']))
@@ -328,7 +339,12 @@ class TripleEMAStrategyOptimized:
                 #     'stop_loss': stop_loss_long,
                 #     'take_profit': min(take_profit_long, last['swing_high'])
                 # }
-                stop_loss = last['high'] - self.atr_mult * last['atr']
+                # stop_loss = last['high'] - self.atr_mult * last['atr']
+                high_val = float(last['high'])
+                atr_val = float(last['atr'])
+                atr_mult_val = float(self.atr_mult)
+
+                stop_loss = high_val - atr_mult_val * atr_val
                 self.last_signal= 'BUY_ENTRY',stop_loss
                 print(f"BUY ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
                 # input("Press Enter to continue...")
@@ -343,7 +359,12 @@ class TripleEMAStrategyOptimized:
                 #     'take_profit': max(take_profit_short, last['swing_low'])
                 # }
                 
-                stop_loss = last['low'] + self.atr_mult * last['atr']
+                # stop_loss = last['low'] + self.atr_mult * last['atr']
+                low_val = float(last['low'])
+                atr_val = float(last['atr'])
+                atr_mult_val = float(self.atr_mult)
+
+                stop_loss = low_val + atr_mult_val * atr_val
                 print(f"SELL ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
                 # input("Press Enter to continue...")
                 self.last_signal = 'SELL_ENTRY',stop_loss

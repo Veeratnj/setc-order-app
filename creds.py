@@ -1,8 +1,8 @@
 # veera
-api_key = 'Uo3GNqh4'
-username = 'V158268'
-pwd = 1212
-token = "W4UZV4CVSU65J4RMFRCFPMMBEM"
+# api_key = 'Uo3GNqh4'
+# username = 'V158268'
+# pwd = 1212
+# token = "W4UZV4CVSU65J4RMFRCFPMMBEM"
 
 
 # #raja
@@ -19,10 +19,10 @@ token = "W4UZV4CVSU65J4RMFRCFPMMBEM"
 # token = "HIPF3HUP467XMWTXZEJROVDOAU"
 
 # #Hemalatha
-# api_key = '5afTALj7'
-# username = 'H59296493'
-# pwd = 8689
-# token = "C7GPZVQB376G3RHN6IQD6QKJ5A"
+api_key = '5afTALj7'
+username = 'H59296493'
+pwd = 8689
+token = "C7GPZVQB376G3RHN6IQD6QKJ5A"
 
 
 # Name             -      Kamal Raj

@@ -55,7 +55,8 @@ class StrategyTrader:
 
         # Assuming ohlc_row is a tuple in this exact column order:
         # id, token, start_time, open, high, low, close, interval, created_at
-        _, _, start_time, open_price, high_price, low_price, close_price, _, _ = ohlc_row
+        print(ohlc_row)
+        _, _, start_time, open_price, high_price, low_price, close_price, _, _ = list(ohlc_row.values())
 
         return start_time, open_price, high_price, low_price, close_price
 
@@ -190,8 +191,9 @@ class StrategyTrader:
                 try:
                     ltp_timestamp, ltp_price = self.get_latest_ltp(stock_token)
                 except Exception as e:
+                    print(e)
                     logging.error(f"Failed to fetch latest LTP: {e}")
-                    time.sleep(2)
+                    # time.sleep(2)
                     continue
 
                 # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
@@ -201,6 +203,7 @@ class StrategyTrader:
                     previous_candle_time=start_time
                     continue
                 previous_candle_time=start_time
+                print('start time is ==',start_time)
                 strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=start_time)
                 signal,stop_loss = strategy.generate_signal()
                 logging.info(f"Signal generated: {signal}")
@@ -416,6 +419,7 @@ class StrategyTrader:
                 logging.info("Trading day ended before all trades could be completed.")
 
         except Exception as e:
+            raise e
             logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
 
     def main(self) -> None:
