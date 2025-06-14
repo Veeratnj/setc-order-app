@@ -1,11 +1,12 @@
 import json
 import logging
+import time
 from SmartApi import SmartConnect
 import pandas as pd
 import pyotp
 import numpy as np
 import psql
-from creds import *
+# from creds import *
 from typing import Dict, Any, Optional
 
 # Configure logging
@@ -64,10 +65,17 @@ def place_angelone_order(smart_api_obj: SmartConnect, order_details: Dict[str, A
         logging.error(f"An error occurred while placing the order: {str(e)}", exc_info=True)
         return None
 
-def get_historical_data(
+def get_historical_data1(
     smart_api_obj: SmartConnect, exchange: str, symboltoken: str, interval: str, fromdate: str, todate: str
 ) -> Optional[pd.DataFrame]:
-    """Fetch historical data and calculate EMAs."""
+    """Fetch historical data """
+    historic_param = {
+            "exchange": exchange,
+            "symboltoken": symboltoken,
+            "interval": interval,
+            "fromdate": fromdate,
+            "todate": todate,
+        }
     try:
         logging.info(f"Fetching historical data for symboltoken={symboltoken}, interval={interval}")
         historic_param = {
@@ -95,12 +103,74 @@ def get_historical_data(
         # data_df['buy_exit'] = np.nan
         # data_df['sell_exit'] = np.nan
 
-        # data_df.to_csv('ind_live.csv', index=False)
+        data_df.to_csv(f'{symboltoken}.csv', index=False)
+        print(f"Historical data saved to {symboltoken}.csv")
         logging.info("Historical data fetched ")
         return data_df
     except Exception as e:
         logging.error(f"An error occurred while fetching historical data: {str(e)}", exc_info=True)
+        print(f"An error occurred while fetching historical data: {str(e)}")
+        time.sleep(5)
+        # get_historical_data(
+        #     smart_api_obj, exchange, symboltoken, interval, fromdate, todate
+        # )
         return None
+
+def get_historical_data(
+    smart_api_obj: SmartConnect,
+    exchange: str,
+    symboltoken: str,
+    interval: str,
+    fromdate: str,
+    todate: str,
+    max_retries: int = 5,
+    save_to_csv: bool = True,
+    retry_delay: int = 5
+) -> Optional[pd.DataFrame]:
+    """Fetch historical data with retries and rate-limit handling."""
+
+    historic_param = {
+        "exchange": exchange,
+        "symboltoken": symboltoken,
+        "interval": interval,
+        "fromdate": fromdate,
+        "todate": todate,
+    }
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info(f"[{symboltoken}] Attempt {attempt}: Fetching data...")
+            raw_data = smart_api_obj.getCandleData(historic_param)
+
+            if not raw_data or 'data' not in raw_data or not raw_data['data']:
+                logging.warning(f"[{symboltoken}] No data returned.")
+                return None
+
+            df = pd.DataFrame(raw_data['data'], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+            if save_to_csv:
+                file_name = f"{symboltoken}.csv"
+                df.to_csv(file_name, index=False)
+                logging.info(f"[{symboltoken}] Data saved to {file_name}")
+                print(f"✅ Historical data saved to {file_name}")
+
+            return df
+
+        except Exception as e:
+            err_msg = str(e)
+            logging.error(f"[{symboltoken}] Error on attempt {attempt}: {err_msg}", exc_info=True)
+
+            if "Access denied" in err_msg or "exceeding access rate" in err_msg:
+                wait_time = retry_delay * attempt  # exponential backoff
+                print(f"⏳ Rate limit hit for {symboltoken}, sleeping {wait_time}s before retrying...")
+                time.sleep(wait_time)
+            else:
+                print(f"❌ Error for {symboltoken}, sleeping {retry_delay}s...")
+                time.sleep(retry_delay)
+
+    print(f"❌ Failed to fetch data for {symboltoken} after {max_retries} retries.")
+    return None
 
 def buy_sell_function12(data: pd.DataFrame) -> tuple:
     """Generate buy/sell signals based on EMA crossover strategy."""
@@ -224,7 +294,7 @@ def get_latest_ltp_from_db(token: str) -> Optional[Dict[str, Any]]:
         logging.error(f"Database error while fetching LTP: {str(e)}", exc_info=True)
         return None
 
-def combine_historical_with_live_algo(historical_df: pd.DataFrame, token: str) -> pd.DataFrame:
+def combine_historical_with_live_algo12(historical_df: pd.DataFrame, token: str) -> pd.DataFrame:
     """Combine historical data with live LTP and recalculate signals."""
     try:
         logging.info(f"Combining historical data with live LTP for token={token}...")

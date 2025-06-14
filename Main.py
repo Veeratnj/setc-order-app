@@ -10,7 +10,7 @@ from services import (
     place_angelone_order,
     get_auth,
     get_historical_data,
-    combine_historical_with_live_algo,
+    
     buy_sell_function12
 )
 from creds import *
@@ -23,16 +23,17 @@ from temp2 import candles_builder
 
 class StrategyTrader:
     def __init__(self):
-        self.smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
+        # self.smart_api_obj = get_auth(api_key=api_key, username=username, pwd=pwd, token=token)
         pass
 
-    def place_order(self,order_params: Dict[str, Any], user_id: int, stock_token: str) -> None:
+    def place_order(self,order_params: Dict[str, Any], user_id: int, stock_token: str,smart_api_obj) -> None:
         """Helper function to place an order."""
         try:
             logging.info(f"Placing order with params: {order_params}")
             result = place_angelone_order(
-                smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
-                order_details=order_params
+                # smart_api_obj=get_auth(api_key=api_key, username=username, pwd=pwd, token=token),
+                order_details=order_params,
+                smart_api_obj=smart_api_obj,
             )
             logging.info(f"Order placed successfully for user_id={user_id}, stock_token={stock_token}")
             return result
@@ -109,7 +110,7 @@ class StrategyTrader:
         # return True
         return market_open <= now <= market_close
 
-    def trade_function(self, row: Dict[str, Any]) -> None:
+    def trade_function(self, row: Dict[str, Any],smart_api_obj) -> None:
         try:
             logging.info(f"Starting trade_function for row: {row}")
 
@@ -158,15 +159,25 @@ class StrategyTrader:
             todate = today.strftime("%Y-%m-%d %H:%M")
             print(f"Fetching historical data from {fromdate} to {todate}")
             # 5/0
-            historical_df = get_historical_data(
-                smart_api_obj=self.smart_api_obj,
+            # historical_df = get_historical_data(
+            #     smart_api_obj=self.smart_api_obj,
+            #     exchange="NSE",
+            #     symboltoken=stock_token,
+            #     interval="FIVE_MINUTE",
+            #     # fromdate='2025-05-15 08:11',
+            #     fromdate=fromdate,
+            #     # todate='2025-05-26 08:11'
+            #     todate=todate
+            # )
+            
+            historical_df=smart_api_obj.get_historical_data(
+                # smart_api_obj=self.smart_api_obj,
                 exchange="NSE",
                 symboltoken=stock_token,
                 interval="FIVE_MINUTE",
-                # fromdate='2025-05-15 08:11',
-                fromdate=fromdate,
-                # todate='2025-05-26 08:11'
-                todate=todate
+                from_date=fromdate,
+                to_date=todate
+
             )
             if historical_df is None or historical_df.empty:
                 logging.error("No historical data found, aborting trade_function.")
@@ -428,24 +439,38 @@ class StrategyTrader:
             data: List[Dict[str, Any]] = psql.execute_query(
                 text("SELECT * FROM user_active_strategy WHERE is_started = false")
             )
+            user_ids= psql.execute_query(
+                text("SELECT id FROM public.user;")
+            )
             if not data:
                 logging.info("No new strategies to start.")
                 return
+            print(user_ids)
 
             ids_to_update: List[int] = [row['id'] for row in data]
             logging.info(f"Updated is_started=true for IDs: {ids_to_update}")
             print(len(data))
             time.sleep(2)
+            smart_spi_obj_dicts={}
+
+            for id in user_ids:
+                print(f"User ID: {id['id']}")
+                smart_spi_obj_dicts[id['id']]=SmartAPIUserCredentialsClass(user_id=str(id['id']))
+
+
+
+
+            
 
             for row in data:
-                sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
-                psql.execute_query(sql, params={"id": row['id']})
+                # sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
+                # psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
-                # self.trade_function(row)
-                t = Thread(target=self.trade_function, args=(row,))
+               
+                t = Thread(target=self.trade_function, args=(row,smart_spi_obj_dicts[row['user_id']]))
                 t.start()
                 print(f"Starting thread for user_id={row['user_id']}, strategy_id={row['strategy_id']}, token={row['stock_token']}")
-
+                time.sleep(1)
         except Exception as e:
             logging.error("Error in run method", exc_info=True)
 
