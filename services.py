@@ -125,7 +125,7 @@ def get_historical_data(
     todate: str,
     max_retries: int = 5,
     save_to_csv: bool = True,
-    retry_delay: int = 5
+    retry_delay: float = 1.5
 ) -> Optional[pd.DataFrame]:
     """Fetch historical data with retries and rate-limit handling."""
 
@@ -151,7 +151,7 @@ def get_historical_data(
 
             if save_to_csv:
                 file_name = f"{symboltoken}.csv"
-                df.to_csv(file_name, index=False)
+                # df.to_csv(file_name, index=False)
                 logging.info(f"[{symboltoken}] Data saved to {file_name}")
                 print(f"✅ Historical data saved to {file_name}")
 

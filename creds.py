@@ -47,7 +47,10 @@
 
 import collections
 import json
-from services import get_auth,get_historical_data
+
+import pandas as pd
+from services import get_auth,get_historical_data,place_angelone_order
+from datetime import datetime, timedelta
 
 def load_credentials():
     # Load credentials from a JSON file
@@ -85,7 +88,7 @@ class SmartAPIUserCredentialsClass:
             self.smart_api_obj = get_auth(self.api_key, self.username, self.pwd, self.token)
             self.historical_dict = collections.defaultdict(dict)
 
-    def get_historical_data(self,symboltoken="",exchange="",from_date="2025-05-01 08:11", to_date="2025-05-15 08:11", interval="day"):
+    def get_historical_data_(self,symboltoken="",exchange="",from_date="2025-05-01 08:11", to_date="2025-05-15 08:11", interval="day"):
         
         df=get_historical_data(
             smart_api_obj=self.smart_api_obj,
@@ -101,8 +104,54 @@ class SmartAPIUserCredentialsClass:
         return df
         # print(f"Historical data for {symboltoken} from {from_date} to {to_date} fetched successfully.")
 
+    def get_latest_5min_candle(self, symboltoken: str, exchange: str = "NSE") -> dict:
+        now = datetime.now()
+
+        # Calculate previous closed 5-minute candle start and end times
+        minute = (now.minute // 5) * 5
+        end_time = now.replace(minute=minute, second=0, microsecond=0)
+        start_time = end_time - timedelta(minutes=5)
+
+        from_date = start_time.strftime('%Y-%m-%d %H:%M')
+        to_date = end_time.strftime('%Y-%m-%d %H:%M')
+        print(f"Fetching data for {symboltoken} from {from_date} to {to_date}")
+        # from_date = '2025-06-13 13:50'
+        # to_date = '2025-06-13 13:55'
+
+        df = self.get_historical_data_(
+            symboltoken=symboltoken,
+            exchange=exchange,
+            from_date=from_date,
+            to_date=from_date,
+            interval="FIVE_MINUTE"
+        )
+
+        if df is None or df.empty:
+            print(f"[!] No data found for {from_date} to {to_date}")
+            return {}
+        
+        
+        latest_candle = df[df['timestamp'] == from_date]
+        row=latest_candle[0]
+        if row.empty:
+            # print(f"No candle found for {candle_start_time}")
+            return None
+
+        row = row.iloc[0]
+        return row['timestamp'], row['open'], row['high'], row['low'], row['close']
+
+        # return latest_candle
+    
+    def place_order(self, order_params: dict):
+        
+        result=place_angelone_order(
+            smart_api_obj=self.smart_api_obj,
+            order_details=order_params
+        )
+        return result
+
     def __str__(self):
         return f"UserCredentials(api_key={self.api_key}, username={self.username}, pwd={self.pwd}, token={self.token},"
 
 
-print(SmartAPIUserCredentialsClass(user_id=6))
+# print(SmartAPIUserCredentialsClass(user_id=6))

@@ -32,6 +32,10 @@ class TripleEMAStrategyOptimized:
         self.last_position = None
         self.token = token
         self.stock_symbol = stock_symbol
+        self.target_buy=None
+        self.stop_loss_buy = None
+        self.target_sell=None
+        self.stop_loss_sell = None
     
     def update_trailing_stop_loss(self):
         if self.position is None:
@@ -210,21 +214,21 @@ class TripleEMAStrategyOptimized:
 
         # Entry conditions
         long_cond = (
-            prev['ema_fast'] <= prev['ema_med'] and
+            prev['ema_fast'] < prev['ema_med'] and
             last['ema_fast'] > last['ema_med'] and
             last['ema_med'] > last['ema_long'] and
             last['ema_long'] > last['ema_macro'] and
-            # last['ema_ultra_len'] > last['ema_macro'] and
+            # last['ema_macro'] > last['ema_ultra_len'] and
             last['rsi'] > self.rsi_thresh and
             last['in_session'] 
             # and last['isLongTrend']
         )
         short_cond = (
-            prev['ema_fast'] >= prev['ema_med'] and
+            prev['ema_fast'] > prev['ema_med'] and
             last['ema_fast'] < last['ema_med'] and
             last['ema_med'] < last['ema_long'] and
             last['ema_long'] < last['ema_macro'] and
-            # last['ema_ultra_len'] < last['ema_macro'] and
+            # last['ema_macro'] < last['ema_ultra_len'] and
             last['rsi'] < self.rsi_thresh and
             last['in_session'] 
             # and last['isShortTrend']
@@ -236,7 +240,7 @@ class TripleEMAStrategyOptimized:
         # stop_loss_long = last['high'] - last['atr'] * self.atr_mult
         # stop_loss_short = last['low'] + last['atr'] * self.atr_mult
         # risk_amt = 100000 * (self.risk_percent / 100)  # Example: 100k capital
-        risk_amt = self.base_amount * (self.risk_percent / 100)  # Example: 100k capital
+        # risk_amt = self.base_amount * (self.risk_percent / 100)  # Example: 100k capital
         # qty_long = risk_amt / (last['close'] - stop_loss_long) if (last['close'] - stop_loss_long) != 0 else 0
         # qty_short = risk_amt / (stop_loss_short - last['close']) if (stop_loss_short - last['close']) != 0 else 0
         # take_profit_long = last['close'] + (last['close'] - stop_loss_long) * self.reward_rr
@@ -254,6 +258,41 @@ class TripleEMAStrategyOptimized:
 
         bue_exit_cond = (last['low'] <= stop_loss_long or last['low'] >= min(take_profit_long, last['swing_high']))
         sell_exit_cond = (last['high'] >= stop_loss_short or last['high'] <= max(take_profit_short, last['swing_low']))
+
+        # stop_loss=self.df['low'].tail(8).mean()
+        # target=self.df['close'].tail(1).mean()+(abs(stop_loss-self.df['close'].tail(1).mean())*2)
+        # recent_low_avg_buy = self.df['low'].tail(8).mean()
+        # last_close_buy = self.df['close'].tail(1).mean()
+
+        # stop_loss_buy = recent_low_avg_buy
+        # target_buy = abs(last_close_buy + abs(last_close_buy - stop_loss_buy) * 2)
+        # '----------------------------------------------------------------'
+        # recent_low_avg_sell = self.df['high'].tail(8).mean()
+        # last_close_sell = self.df['close'].tail(1).mean()
+
+        # stop_loss_sell = recent_low_avg_sell
+        # target_sell = abs(last_close_sell - abs(stop_loss_sell-last_close_sell  ) * 2)
+        # target_buy = None
+        # target_sell = None
+        recent_low_avg_buy = float(self.df['low'].tail(8).astype(float).min())
+        last_close_buy = float(self.df['close'].tail(1).astype(float).min())
+
+        self.stop_loss_buy = recent_low_avg_buy
+        # if self.target_buy is None:
+        #     self.target_buy = abs(last_close_buy + abs(last_close_buy - self.stop_loss_buy) * 2)
+
+        # ----------------------------------------------------------------
+
+        recent_low_avg_sell = float(self.df['high'].tail(8).astype(float).max())
+        last_close_sell = float(self.df['close'].tail(1).astype(float).max())
+
+        self.stop_loss_sell = recent_low_avg_sell
+        # if self.target_sell is None:
+        #     # target_sell = abs(last_close_sell - abs(stop_loss_sell - last_close_sell) * 2)
+        #     self.target_sell = abs(last_close_sell - abs(self.stop_loss_sell - last_close_sell) * 2)
+
+        
+
 
 
         with open("condition_log.txt", "a") as f:
@@ -317,6 +356,10 @@ class TripleEMAStrategyOptimized:
         Timestamp:      {last['timestamp']}
         Long Trend:     {last['isLongTrend']}
         Short Trend:    {last['isShortTrend']}
+        stop_loss_buy:      {self.stop_loss_buy}
+        target_buy:         {self.target_buy}
+        stop_loss_sell:      {self.stop_loss_sell}
+        target_sell:         {self.target_sell}
 
         =========================================================
 
@@ -344,9 +387,11 @@ class TripleEMAStrategyOptimized:
                 atr_val = float(last['atr'])
                 atr_mult_val = float(self.atr_mult)
 
-                stop_loss = high_val - atr_mult_val * atr_val
-                self.last_signal= 'BUY_ENTRY',stop_loss
-                print(f"BUY ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
+                # stop_loss = high_val - atr_mult_val * atr_val
+                self.target_buy = abs(last_close_buy + abs(last_close_buy - self.stop_loss_buy) * 2)
+
+                self.last_signal= 'BUY_ENTRY',self.stop_loss_buy ,self.target_buy
+                print(f"BUY ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {self.stop_loss_buy}, Take Profit: {min(take_profit_long, last['swing_high'])}")
                 # input("Press Enter to continue...")
                 return self.last_signal
             elif short_cond:
@@ -363,11 +408,12 @@ class TripleEMAStrategyOptimized:
                 low_val = float(last['low'])
                 atr_val = float(last['atr'])
                 atr_mult_val = float(self.atr_mult)
+                self.target_sell = abs(last_close_sell - abs(self.stop_loss_sell - last_close_sell) * 2)
 
-                stop_loss = low_val + atr_mult_val * atr_val
-                print(f"SELL ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {stop_loss}, Take Profit: {min(take_profit_long, last['swing_high'])}")
+                # stop_loss = low_val + atr_mult_val * atr_val
+                print(f"SELL ENTRY: {last['timestamp']} {last['close']}, Stop Loss: {self.stop_loss_sell}, Take Profit: {min(take_profit_long, last['swing_high'])}")
                 # input("Press Enter to continue...")
-                self.last_signal = 'SELL_ENTRY',stop_loss
+                self.last_signal = 'SELL_ENTRY',self.stop_loss_sell,self.target_sell
                 return self.last_signal
         elif self.last_position == 'LONG':
             # Exit if price hits stop loss or take profit
@@ -377,20 +423,23 @@ class TripleEMAStrategyOptimized:
 
                 self.last_position = None
                 # self.last_signal = {'signal': 'BUY_EXIT'}
-                self.last_signal= 'BUY_EXIT'
+                self.last_signal= 'BUY_EXIT',self.stop_loss_buy,self.target_buy
                 print(f"BUY exit: {last['timestamp']} {last['close']},")
                 # input("Press Enter to continue...")
-                return self.last_signal,None
+                return self.last_signal,
         elif self.last_position == 'SHORT':
             # if last['high'] >= stop_loss_short or last['high'] <= max(take_profit_short, last['swing_low']):
             if sell_exit_cond:
                 self.last_position = None
                 # self.last_signal = {'signal': 'SELL_EXIT'}
                 print(f"BUY exit: {last['timestamp']} {last['close']},")
-                self.last_signal = 'SELL_EXIT'
-                return self.last_signal,None
-
-        return None,None
+                self.last_signal = 'SELL_EXIT',self.stop_loss_sell,self.target_sell
+                return self.last_signal
+        if self.last_position is not None and self.last_position =='BUY_ENTRY':
+            return None,self.stop_loss_buy,self.target_buy
+        if self.last_position is not None and self.last_position =='SELL_ENTRY':
+            return None,self.stop_loss_sell,self.target_sell
+        return None,None,None
 
 
 if __name__ == "__main__":

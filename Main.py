@@ -35,7 +35,7 @@ class StrategyTrader:
                 order_details=order_params,
                 smart_api_obj=smart_api_obj,
             )
-            logging.info(f"Order placed successfully for user_id={user_id}, stock_token={stock_token}")
+            logging.info(f"Order placed successfully for user_id={user_id}, stock_token={stock_token} order id {result}")
             return result
         except Exception as e:
             logging.error(f"Failed to place order for user_id={user_id}, stock_token={stock_token} - {str(e)}", exc_info=True)
@@ -56,11 +56,25 @@ class StrategyTrader:
 
         # Assuming ohlc_row is a tuple in this exact column order:
         # id, token, start_time, open, high, low, close, interval, created_at
-        print(ohlc_row)
+        # print(ohlc_row)
         _, _, start_time, open_price, high_price, low_price, close_price, _, _ = list(ohlc_row.values())
 
         return start_time, open_price, high_price, low_price, close_price
 
+    # def get_live_ohlc(self,smart_api_obj,token:str,from_date:str='',to_date:str='',interval:str='FIVE_MINUTE',) -> pd.DataFrame:
+       
+    #     df=smart_api_obj.get_historical_data_(
+    #             # smart_api_obj=self.smart_api_obj,
+    #             exchange="NSE",
+    #             symboltoken=token,
+    #             interval="FIVE_MINUTE",
+    #             from_date=from_date,
+    #             to_date=to_date
+    #         )
+
+        
+    
+    
     def fetch_from_db(self,query: str, params: Dict[str, Any], error_message: str) -> Dict[str, Any]:
         """Helper function to fetch data from the database."""
         try:
@@ -105,7 +119,7 @@ class StrategyTrader:
     def is_market_open(self):
         """Returns True if current time is within trading hours (e.g., 9:15 to 15:30). Adjust as needed."""
         now = datetime.now()
-        market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        market_open = now.replace(hour=9, minute=20, second=0, microsecond=0)
         market_close = now.replace(hour=15, minute=25, second=0, microsecond=0)
         # return True
         return market_open <= now <= market_close
@@ -113,6 +127,12 @@ class StrategyTrader:
     def trade_function(self, row: Dict[str, Any],smart_api_obj) -> None:
         try:
             logging.info(f"Starting trade_function for row: {row}")
+            def stocks_quantity(ltp: float, balance: float) -> int:
+                return 1
+                if float(ltp) <= 0:
+                    return 0
+                    # raise ValueError("LTP must be greater than 0")
+                return int(float(balance) // float(ltp))
 
             quantity = row['quantity']
             stock_token = row['stock_token']
@@ -170,14 +190,13 @@ class StrategyTrader:
             #     todate=todate
             # )
             
-            historical_df=smart_api_obj.get_historical_data(
+            historical_df=smart_api_obj.get_historical_data_(
                 # smart_api_obj=self.smart_api_obj,
                 exchange="NSE",
                 symboltoken=stock_token,
                 interval="FIVE_MINUTE",
                 from_date=fromdate,
                 to_date=todate
-
             )
             if historical_df is None or historical_df.empty:
                 logging.error("No historical data found, aborting trade_function.")
@@ -191,12 +210,35 @@ class StrategyTrader:
                 # Adjust this logic for your timeframe (5min, 1min, 30sec, etc.)
                 return now.minute % 1 == 0 and now.second < 3
             open_order=False
+            
             previous_candle_time=None
+            stop_loss = None
+            target = None
+            previous_entry_exit_key = None
+            order_params=None
             while (trade_count > 0 and True) or open_order:
+                
+
+                exit_flag=False
+                if previous_entry_exit_key is not None and stop_loss is not None and target is not None:
+                    if previous_entry_exit_key == 'BUY_EXIT':
+                        if ltp_price<=stop_loss or ltp_price>=target:
+                            exit_flag=True
+                            print('exit flag is true')
+                            logging.info(f"buy exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price<=stop_loss} cond2{ltp_price>=target}")
+                    elif previous_entry_exit_key == 'SELL_EXIT':
+                        if ltp_price>=stop_loss or ltp_price<=target:
+                            exit_flag=True
+                            print('exit flag is true')
+                            logging.info(f"sell exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price>=stop_loss} cond2{ltp_price<=target}")
+
+                    # if stop_loss<=ltp_price or target>=ltp_price:
+                    #     exit_flag=True
+                    #     print('exit flag is true')
                 # while not is_time_window() and self.is_market_open():
                 #     time.sleep(0.5)
                 if not self.is_market_open():
-                    logging.info("Market closed. Exiting trade_function.")
+                    # logging.info("Market closed. Exiting trade_function.")
                     continue
 
                 try:
@@ -210,23 +252,34 @@ class StrategyTrader:
                 # signal = strategy.add_live_price(ltp_timestamp, ltp_price)
                 # open_, high, low, close, end_time = candles_builder(stock_token, )
                 start_time,open_, high, low, close = self.get_ohlc(token=stock_token,time_frame=None )
-                if start_time == previous_candle_time:
+                # start_time,open_, high, low, close = smart_api_obj.get_latest_5min_candle(symboltoken=stock_token, )
+                if start_time == previous_candle_time and not exit_flag:
                     previous_candle_time=start_time
                     continue
                 previous_candle_time=start_time
                 print('start time is ==',start_time)
                 strategy.add_live_data(open_=open_,close=close, high=high, low=low, volume=0, timestamp=start_time)
-                signal,stop_loss = strategy.generate_signal()
-                logging.info(f"Signal generated: {signal}")
+                signal,stop_loss_,target_ = strategy.generate_signal()
+                if target_ is not None:
+                    target = target_
+                if stop_loss_ is not None:
+                    stop_loss = stop_loss_
+                
+                logging.info(f"Signal generated: {signal} stop loss {stop_loss} target {target} previous entry exit key {previous_entry_exit_key} ltp {ltp_price}  token {stock_token} ")
 
                 if signal == 'BUY_ENTRY':
+                    previous_entry_exit_key = 'BUY_EXIT'
+                    quantity=stocks_quantity(ltp=ltp_price,balance=smart_api_obj.smart_api_obj.rmsLimit()['data']['availablecash'])
+                    # if not(quantity):
+                    #     continue
+                    
                     print('BUY_ENTRY signal received')
                     print({
                             "order_id": order_manager_uuid,
                             "stock_token": stock_token,
                             "trade_type": "buy",
                             "quantity": quantity,
-                            "price": 0,
+                            "price": quantity * ltp_price,
                             "entry_ltp": ltp_price,
                             "exit_ltp": 0,
                             "total_price": 0,
@@ -237,7 +290,7 @@ class StrategyTrader:
                     trade_count -= 1
                     order_params = {
                         "variety": "NORMAL",
-                        "tradingsymbol": stock_details['stock_name'],
+                        "tradingsymbol": stock_details['symbol'],
                         "symboltoken": stock_token,
                         "transactiontype": "BUY",
                         "exchange": "NSE",
@@ -246,10 +299,12 @@ class StrategyTrader:
                         "duration": "DAY",
                         "price": "0",
                         "squareoff": "0",
-                        "stoploss": "0",
+                        "stoploss": str(stop_loss),
                         "quantity": quantity
                     }
-                    # angelone_response = self.place_order(order_params, user_id, stock_token)
+                    # angelone_response = smart_api_obj.place_order(order_params=order_params, user_id=user_id, stock_token=stock_token,smart_api_obj=smart_api_obj)
+                    angelone_response = smart_api_obj.place_order(order_params=order_params)
+
                     psql.execute_query(
                         raw_sql="""
                         INSERT INTO equity_trade_history (
@@ -265,6 +320,9 @@ class StrategyTrader:
                             "quantity": quantity,
                             "price": 0,
                             "entry_ltp": ltp_price,
+                            "quantity": quantity,
+                            "price": quantity * ltp_price,
+                            
                             "exit_ltp": 0,
                             "total_price": 0,
                             "trade_entry_time": datetime.now(),
@@ -288,7 +346,8 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
 
-                elif signal == 'SELL_ENTRY':
+                elif signal == 'SELL_ENTRY' : 
+                    previous_entry_exit_key = 'SELL_EXIT'
                     print('SELL_ENTRY signal received')
                     print({
                             "order_id": order_manager_uuid,
@@ -311,7 +370,7 @@ class StrategyTrader:
                     trade_count -= 1
                     order_params = {
                         "variety": "NORMAL",
-                        "tradingsymbol": stock_details['stock_name'],
+                        "tradingsymbol": stock_details['symbol'],
                         "symboltoken": stock_token,
                         "transactiontype": "SELL",
                         "exchange": "NSE",
@@ -320,10 +379,12 @@ class StrategyTrader:
                         "duration": "DAY",
                         "price": "0",
                         "squareoff": "0",
-                        "stoploss": "0",
+                        "stoploss": str(stop_loss),
                         "quantity": quantity
                     }
                     # angelone_response = self.place_order(order_params, user_id, stock_token)
+                    # angelone_response = smart_api_obj.place_order(order_params=order_params, user_id=user_id, stock_token=stock_token,smart_api_obj=smart_api_obj)
+                    angelone_response = smart_api_obj.place_order(order_params=order_params,)
                     psql.execute_query(
                         raw_sql="""
                         INSERT INTO equity_trade_history (
@@ -362,8 +423,7 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
 
-                elif signal == 'BUY_EXIT':
-                    print
+                elif signal == 'BUY_EXIT' or previous_entry_exit_key == 'BUY_EXIT' and exit_flag:
                     open_order=False
                     psql.execute_query(
                         """
@@ -389,10 +449,14 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
                     logging.info(f"Buy exit executed for stock_token={stock_token}")
+                    order_params['transactiontype'] = 'SELL'
+                    # angelone_response = smart_api_obj.place_order(order_params=order_params, user_id=user_id, stock_token=stock_token,smart_api_obj=smart_api_obj)
+                    angelone_response = smart_api_obj.place_order(order_params=order_params,)
 
-                elif signal == 'SELL_EXIT':
+                elif signal == 'SELL_EXIT' or previous_entry_exit_key == 'SELL_EXIT' and exit_flag:
                     print('sell exit signal received')
                     open_order=False
+                    order_params['transactiontype'] = 'BUY'
                     psql.execute_query(
                         """
                         UPDATE equity_trade_history
@@ -417,6 +481,8 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
                     logging.info(f"Sell exit executed for stock_token={stock_token}")
+                    # angelone_response = smart_api_obj.place_order(order_params=order_params, user_id=user_id, stock_token=stock_token,smart_api_obj=smart_api_obj)
+                    angelone_response = smart_api_obj.place_order(order_params=order_params,)
 
                 # Sleep to avoid double execution in the same minute
                 time.sleep(2)
@@ -430,7 +496,7 @@ class StrategyTrader:
                 logging.info("Trading day ended before all trades could be completed.")
 
         except Exception as e:
-            raise e
+            # raise e
             logging.error(f"Error processing trade for user_id={row.get('user_id')} - {str(e)}", exc_info=True)
 
     def main(self) -> None:
@@ -458,10 +524,6 @@ class StrategyTrader:
                 smart_spi_obj_dicts[id['id']]=SmartAPIUserCredentialsClass(user_id=str(id['id']))
 
 
-
-
-            
-
             for row in data:
                 # sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
                 # psql.execute_query(sql, params={"id": row['id']})
@@ -469,6 +531,7 @@ class StrategyTrader:
                
                 t = Thread(target=self.trade_function, args=(row,smart_spi_obj_dicts[row['user_id']]))
                 t.start()
+                print(smart_spi_obj_dicts[row['user_id']])
                 print(f"Starting thread for user_id={row['user_id']}, strategy_id={row['strategy_id']}, token={row['stock_token']}")
                 time.sleep(1)
         except Exception as e:

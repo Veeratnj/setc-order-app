@@ -15,7 +15,12 @@ load_dotenv()
 
 # --- PostgreSQL Connection Setup ---
 DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
-engine = create_engine(DB_URL)
+engine = create_engine(DB_URL,
+                       pool_size=50,         # default is 5
+                    max_overflow=50,      # default is 10
+                    pool_timeout=50,
+                    pool_pre_ping=True
+                       )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -166,4 +171,6 @@ def execute_query(raw_sql, params=None):
         session.close()
         # logging.error(f"SQLAlchemyError: {str(e)}", exc_info=True)
         raise
+    finally:
+        session.close()
   
