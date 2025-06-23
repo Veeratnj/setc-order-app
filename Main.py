@@ -128,11 +128,13 @@ class StrategyTrader:
         try:
             logging.info(f"Starting trade_function for row: {row}")
             def stocks_quantity(ltp: float, balance: float) -> int:
-                return 1
+                
                 if float(ltp) <= 0:
                     return 0
                     # raise ValueError("LTP must be greater than 0")
-                return int(float(balance) // float(ltp))
+                usable_balance = balance * 0.65
+                return int(usable_balance // ltp)
+                # return int(float(balance) // float(ltp))
 
             quantity = row['quantity']
             stock_token = row['stock_token']
@@ -222,12 +224,12 @@ class StrategyTrader:
                 exit_flag=False
                 if previous_entry_exit_key is not None and stop_loss is not None and target is not None:
                     if previous_entry_exit_key == 'BUY_EXIT':
-                        if ltp_price<=stop_loss or ltp_price>=target:
+                        if ltp_price<=stop_loss or ltp_price>=target or datetime.now().time() >= time(14,25):
                             exit_flag=True
                             print('exit flag is true')
                             logging.info(f"buy exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price<=stop_loss} cond2{ltp_price>=target}")
                     elif previous_entry_exit_key == 'SELL_EXIT':
-                        if ltp_price>=stop_loss or ltp_price<=target:
+                        if ltp_price>=stop_loss or ltp_price<=target or datetime.now().time() >= time(14,25):
                             exit_flag=True
                             print('exit flag is true')
                             logging.info(f"sell exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price>=stop_loss} cond2{ltp_price<=target}")
@@ -267,7 +269,7 @@ class StrategyTrader:
                 
                 logging.info(f"Signal generated: {signal} stop loss {stop_loss} target {target} previous entry exit key {previous_entry_exit_key} ltp {ltp_price}  token {stock_token} ")
 
-                if signal == 'BUY_ENTRY':
+                if signal == 'BUY_ENTRY' and datetime.now().time()<=time(13, 30):
                     previous_entry_exit_key = 'BUY_EXIT'
                     quantity=stocks_quantity(ltp=ltp_price,balance=smart_api_obj.smart_api_obj.rmsLimit()['data']['availablecash'])
                     # if not(quantity):
@@ -346,7 +348,7 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
 
-                elif signal == 'SELL_ENTRY' : 
+                elif signal == 'SELL_ENTRY' and datetime.now().time() <= time(13, 30): 
                     previous_entry_exit_key = 'SELL_EXIT'
                     print('SELL_ENTRY signal received')
                     print({
