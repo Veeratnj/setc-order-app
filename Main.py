@@ -14,7 +14,7 @@ from services import (
     buy_sell_function12
 )
 from creds import *
-from datetime import datetime, timedelta,time
+from datetime import datetime, timedelta,time as time_c
 from typing import Dict, Any, List
 
 # from strategies import TripleEMAStrategyOptimized
@@ -224,12 +224,12 @@ class StrategyTrader:
                 exit_flag=False
                 if previous_entry_exit_key is not None and stop_loss is not None and target is not None:
                     if previous_entry_exit_key == 'BUY_EXIT':
-                        if ltp_price<=stop_loss or ltp_price>=target or datetime.now().time() >= time(14,25):
+                        if ltp_price<=stop_loss or ltp_price>=target or datetime.now().time() >= time_c(14,25):
                             exit_flag=True
                             print('exit flag is true')
                             logging.info(f"buy exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price<=stop_loss} cond2{ltp_price>=target}")
                     elif previous_entry_exit_key == 'SELL_EXIT':
-                        if ltp_price>=stop_loss or ltp_price<=target or datetime.now().time() >= time(14,25):
+                        if ltp_price>=stop_loss or ltp_price<=target or datetime.now().time() >= time_c(14,25):
                             exit_flag=True
                             print('exit flag is true')
                             logging.info(f"sell exit ltp_price={ltp_price} stop_loss={stop_loss} target={target} previous_entry_exit_key={previous_entry_exit_key} stock_token={stock_token} cond1{ltp_price>=stop_loss} cond2{ltp_price<=target}")
@@ -269,7 +269,7 @@ class StrategyTrader:
                 
                 logging.info(f"Signal generated: {signal} stop loss {stop_loss} target {target} previous entry exit key {previous_entry_exit_key} ltp {ltp_price}  token {stock_token} ")
 
-                if signal == 'BUY_ENTRY' and datetime.now().time()<=time(13, 30):
+                if signal == 'BUY_ENTRY' and datetime.now().time()<=time_c(13, 30):
                     previous_entry_exit_key = 'BUY_EXIT'
                     quantity=stocks_quantity(ltp=ltp_price,balance=smart_api_obj.smart_api_obj.rmsLimit()['data']['availablecash'])
                     # if not(quantity):
@@ -348,7 +348,7 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
 
-                elif signal == 'SELL_ENTRY' and datetime.now().time() <= time(13, 30): 
+                elif signal == 'SELL_ENTRY' and datetime.now().time() <= time_c(13, 30): 
                     previous_entry_exit_key = 'SELL_EXIT'
                     print('SELL_ENTRY signal received')
                     print({
