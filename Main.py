@@ -132,8 +132,8 @@ class StrategyTrader:
                 if float(ltp) <= 0:
                     return 0
                     # raise ValueError("LTP must be greater than 0")
-                usable_balance = balance * 0.65
-                return int(usable_balance // ltp)
+                usable_balance = float(balance) * 0.65
+                return int(usable_balance // float(ltp))
                 # return int(float(balance) // float(ltp))
 
             quantity = row['quantity']
