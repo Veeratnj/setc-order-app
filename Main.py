@@ -503,8 +503,11 @@ class StrategyTrader:
     def main(self) -> None:
         """Main function to start the trading process (no threading, for testing)."""
         try:
+            from datetime import date 
+            to_day_date=date.today().strftime("%Y-%m-%d")
+
             data: List[Dict[str, Any]] = psql.execute_query(
-                text("SELECT * FROM user_active_strategy WHERE is_started = false")
+                text(f"SELECT * FROM user_active_strategy WHERE is_started = false and date(created_at)='{to_day_date}'")
             )
             user_ids= psql.execute_query(
                 text("SELECT id FROM public.user;")
@@ -526,6 +529,8 @@ class StrategyTrader:
 
 
             for row in data:
+                # print(row['stock_token'])
+                # continue
                 # sql = text("UPDATE user_active_strategy SET is_started = true WHERE id = :id")
                 # psql.execute_query(sql, params={"id": row['id']})
                 print(f"Updated is_started=true for ID: {row['id']}")
