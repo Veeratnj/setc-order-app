@@ -16,8 +16,8 @@ load_dotenv()
 # --- PostgreSQL Connection Setup ---
 DB_URL = f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
 engine = create_engine(DB_URL,
-                       pool_size=50,         # default is 5
-                    max_overflow=50,      # default is 10
+                       pool_size=100,         # default is 5
+                    max_overflow=100,      # default is 10
                     pool_timeout=50,
                     pool_pre_ping=True
                        )

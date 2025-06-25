@@ -10,7 +10,6 @@ from services import (
     place_angelone_order,
     get_auth,
     get_historical_data,
-    
     buy_sell_function12
 )
 from creds import *
@@ -425,7 +424,7 @@ class StrategyTrader:
                         params={"id": row['id']}
                     )
 
-                elif signal == 'BUY_EXIT' or previous_entry_exit_key == 'BUY_EXIT' and exit_flag:
+                elif signal == 'BUY_EXIT' or (previous_entry_exit_key == 'BUY_EXIT' and exit_flag):
                     open_order=False
                     psql.execute_query(
                         """
@@ -455,7 +454,7 @@ class StrategyTrader:
                     # angelone_response = smart_api_obj.place_order(order_params=order_params, user_id=user_id, stock_token=stock_token,smart_api_obj=smart_api_obj)
                     angelone_response = smart_api_obj.place_order(order_params=order_params,)
 
-                elif signal == 'SELL_EXIT' or previous_entry_exit_key == 'SELL_EXIT' and exit_flag:
+                elif signal == 'SELL_EXIT' or (previous_entry_exit_key == 'SELL_EXIT' and exit_flag):
                     print('sell exit signal received')
                     open_order=False
                     order_params['transactiontype'] = 'BUY'
