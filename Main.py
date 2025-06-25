@@ -114,6 +114,32 @@ class StrategyTrader:
             logging.error(f"Database query failed for LTP: {str(e)}", exc_info=True)
             raise
 
+    def get_stock_trend_type(self, stock_token: str):
+        """
+        fetch the stock type is bullish or bearish
+        """
+        try:
+            query = """
+                SELECT trend_type
+                FROM stocks
+                WHERE token = :stock_token
+                LIMIT 1
+            """
+            params = {"stock_token": stock_token}
+            result = psql.execute_query(query, params=params)
+            if not result:
+                error_message = f"No trend_type for stock_token: {stock_token}"
+                logging.error(error_message)
+                raise ValueError(error_message)
+            row = result[0]
+            # Ensure timestamp is in datetime format
+            
+            trend_result = row['trend_type']
+            return trend_result
+        except Exception as e:
+            logging.error(f"Database query failed for get trend type: {str(e)}", exc_info=True)
+            raise
+
     
     def is_market_open(self):
         """Returns True if current time is within trading hours (e.g., 9:15 to 15:30). Adjust as needed."""
@@ -127,15 +153,18 @@ class StrategyTrader:
         try:
             logging.info(f"Starting trade_function for row: {row}")
             def stocks_quantity(ltp: float, balance: float) -> int:
+                logging.info(f"Starting stocks_quantity  ltp::{ltp},  balance::{balance}")
                 
                 if float(ltp) <= 0:
                     return 0
                     # raise ValueError("LTP must be greater than 0")
                 usable_balance = float(balance) * 0.65
+                logging.info(f"quantity {int(usable_balance // float(ltp))}")
                 return int(usable_balance // float(ltp))
                 # return int(float(balance) // float(ltp))
 
-            quantity = row['quantity']
+            # quantity = row['quantity']
+            quantity = 2
             stock_token = row['stock_token']
             trade_count = row['trade_count']
             user_id = row['user_id']
@@ -203,7 +232,8 @@ class StrategyTrader:
                 logging.error("No historical data found, aborting trade_function.")
                 return
 
-            strategy = TripleEMAStrategyOptimized(token=stock_token,)
+            strategy = TripleEMAStrategyOptimized(token=stock_token,
+                                                  trade_type=self.get_stock_trend_type(stock_token=stock_token))
             strategy.load_historical_data(historical_df)
 
             def is_time_window():
@@ -349,6 +379,7 @@ class StrategyTrader:
 
                 elif signal == 'SELL_ENTRY' and datetime.now().time() <= time_c(13, 30): 
                     previous_entry_exit_key = 'SELL_EXIT'
+                    quantity=stocks_quantity(ltp=ltp_price,balance=smart_api_obj.smart_api_obj.rmsLimit()['data']['availablecash'])
                     print('SELL_ENTRY signal received')
                     print({
                             "order_id": order_manager_uuid,

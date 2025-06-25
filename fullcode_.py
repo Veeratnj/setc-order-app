@@ -11,7 +11,7 @@ class TripleEMAStrategyOptimized:
                  swing_lookback=30,
                  token='token None',
                  stock_symbol='symbol None',
-                 rsi_trend_tf='30min',):
+                 rsi_trend_tf='30min',trade_type='bullish'):
         self.ema_fast_len = ema_fast_len
         self.ema_med_len = ema_med_len
         self.ema_long_len = ema_long_len
@@ -26,6 +26,7 @@ class TripleEMAStrategyOptimized:
         self.swing_lookback = swing_lookback
         self.rsi_trend_tf = rsi_trend_tf
         self.base_amount = 0
+        self.stock_trend_type=trade_type
 
         self.df = pd.DataFrame()
         self.last_signal = None
@@ -220,6 +221,7 @@ class TripleEMAStrategyOptimized:
             last['ema_long'] > last['ema_macro'] and
             # last['ema_macro'] > last['ema_ultra_len'] and
             last['rsi'] > self.rsi_thresh and
+            self.stock_trend_type=='bullish' and
             last['in_session'] 
             # and last['isLongTrend']
         )
@@ -228,6 +230,7 @@ class TripleEMAStrategyOptimized:
             last['ema_fast'] < last['ema_med'] and
             last['ema_med'] < last['ema_long'] and
             last['ema_long'] < last['ema_macro'] and
+            self.stock_trend_type=='bearish' and
             # last['ema_macro'] < last['ema_ultra_len'] and
             last['rsi'] < self.rsi_thresh and
             last['in_session'] 
@@ -373,7 +376,7 @@ class TripleEMAStrategyOptimized:
             
             
 
-            if long_cond:
+            if long_cond :
                 self.last_position = 'LONG'
                 self.base_amount= last['close']  
                 # self.last_signal = {
