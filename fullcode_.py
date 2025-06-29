@@ -365,6 +365,7 @@ class TripleEMAStrategyOptimized:
         target_sell:         {self.target_sell}
 
         =========================================================
+        *********************************************************
 
         """)
 
@@ -438,9 +439,9 @@ class TripleEMAStrategyOptimized:
                 print(f"BUY exit: {last['timestamp']} {last['close']},")
                 self.last_signal = 'SELL_EXIT',self.stop_loss_sell,self.target_sell
                 return self.last_signal
-        if self.last_position is not None and self.last_position =='BUY_ENTRY':
+        if self.last_position is not None and self.last_position =='LONG':
             return None,self.stop_loss_buy,self.target_buy
-        if self.last_position is not None and self.last_position =='SELL_ENTRY':
+        if self.last_position is not None and self.last_position =='SHORT':
             return None,self.stop_loss_sell,self.target_sell
         return None,None,None
 
