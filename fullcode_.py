@@ -200,7 +200,7 @@ class TripleEMAStrategyOptimized:
 
     def generate_signal(self):
         if len(self.df) < 2:
-            return None
+            return None,None,None
 
         last = self.df.iloc[-1]
         prev = self.df.iloc[-2]
@@ -211,7 +211,7 @@ class TripleEMAStrategyOptimized:
     ]
         if any(pd.isna(last[col]) or pd.isna(prev[col]) for col in required_cols):
             print("Insufficient data for signal generation.")
-            return None
+            return None,None,None
 
         # Entry conditions
         long_cond = (
